@@ -1,6 +1,0 @@
-window,source,arm,status,baseline_km_s,budget_best_km_s,final_best_km_s,budget_replacement_km_s,feasible_replacement_trials,elapsed_s,replacement_prefix_km_s,replacement_core_km_s,replacement_suffix_km_s,replacement_visits,replacement_max_miss_m,replacement_min_altitude_km,replacement_days,replacement_burns
-1,1,R,completed,13.9766348756944,13.976486250469,13.9764851379127,13.976486250469,138,480.888512,0,2.2641783593033,11.7123078911657,35,989.9773109132,603.015968143791,9.76496136587202,34
-1,1,S,completed,13.9766348756944,13.9766348756944,13.9766348756944,NaN,0,480.5720584,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN
-1,1,D,completed,13.9766348756944,13.9766348756944,13.9766348756944,NaN,0,480.3225102,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN
-1,1,P,completed,13.9766348756944,13.9765752526296,13.976575180486,13.9765752526296,134,481.1669377,0,2.26410064160208,11.7124746110275,35,989.977334760609,603.015955282151,9.76496136587202,35
-1,1,L,not_completed,13.9766348756944,NaN,NaN,NaN,0,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN

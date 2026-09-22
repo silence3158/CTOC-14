@@ -1,5 +1,0 @@
-window,source,arm,status,baseline_km_s,budget_best_km_s,final_best_km_s,budget_replacement_km_s,feasible_replacement_trials,elapsed_s,replacement_prefix_km_s,replacement_core_km_s,replacement_suffix_km_s
-1,1,R,completed,13.9766348756944,13.9766348756944,13.9766321379256,NaN,1,2.8041244,NaN,NaN,NaN
-1,1,S,completed,13.9766348756944,13.9766348756944,13.9766348756944,NaN,0,2.9036115,NaN,NaN,NaN
-1,1,D,completed,13.9766348756944,13.9766348756944,13.9766348756944,NaN,0,2.9355138,NaN,NaN,NaN
-1,1,P,completed,13.9766348756944,13.9766348756944,13.9766321379317,NaN,1,3.4260039,NaN,NaN,NaN

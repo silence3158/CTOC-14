@@ -1,1 +1,0 @@
-seed=20404273 elapsed=413.4 iteration=52 best=19.292069357223 current=19.292069357 best_burns=35 accepts=21 restarts=0
