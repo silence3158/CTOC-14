@@ -1,0 +1,10 @@
+﻿Key,Value
+StartTime,2035-09-26 12:00:00
+StopTime,2035-09-28 12:00:00
+ElapsedMSec,0
+StepSize,10000
+UseStopUTC,0
+ThreadNum,1
+Mode,1
+SaveHistoryData,1
+SaveQuickReport,0

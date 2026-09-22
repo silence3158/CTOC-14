@@ -1,0 +1,35 @@
+
+Simulink Agentic Toolkit - Installation Check
+===============================================
+
+Prerequisites
+  ? MATLAB 24.1.0.2537033 (R2024a)
+  ? Simulink installed and licensed
+
+MATLAB Environment
+  ? All 7 tool entry points on path
+  ? Package resolution correct (+sage, +mbd inside SATK)
+
+MCP Server
+  ? matlab-mcp-server.exe found: C:\Users\Lenovo\.matlab\agentic-toolkits\bin\matlab-mcp-server.exe
+
+MCP Connectivity
+  ? shareMATLABSession available (MATLAB-side MCP components installed)
+  ? MATLAB connector not running. Required for --matlab-session-mode=existing.
+    Fix: Run: shareMATLABSession()
+
+===============================================
+Result: PASS (1 warning(s))
+
+[警告: 'duration' 类的对象已存在。无法清除此类或其任何超类。] 
+[> 位置：distcomp.clearFunction (第 33 行)] 
+[警告: 'onCleanup' 类的对象已存在。无法清除此类或其任何超类。] 
+[> 位置：distcomp.clearFunction (第 33 行)] 
+[警告: 'datetime' 类的对象已存在。无法清除此类或其任何超类。] 
+[> 位置：distcomp.clearFunction (第 33 行)] 
+[警告: 'parallel.ValueStore' 类的对象已存在。无法清除此类或其任何超类。] 
+[> 位置：distcomp.clearFunction (第 33 行)] 
+[警告: 'distcomp.runprop' 类的对象已存在。无法清除此类或其任何超类。] 
+[> 位置：distcomp.clearFunction (第 33 行)] 
+[警告: 'distcomp.objectroot' 类的对象已存在。无法清除此类或其任何超类。] 
+[> 位置：distcomp.clearFunction (第 33 行)] 

@@ -1,0 +1,3 @@
+﻿Index,Name,WayStartUTC,Time_s,Lat_deg,Lon_deg,Alt_m,SourceFile,SourceXPath
+1,Ship,2035-09-26 12:00:00,0,10.642,53.558,0,CTOC13.xml,/Scenario/Ship/Route/WayPt[1]
+2,Ship,2035-09-26 12:00:00,172800,6.582,77.96299999999999,0,CTOC13.xml,/Scenario/Ship/Route/WayPt[2]

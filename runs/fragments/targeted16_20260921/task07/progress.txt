@@ -1,0 +1,1 @@
+seed=20337900 elapsed=256.8 iteration=28 dv=13.976837787874 burns=34 accepts=11
