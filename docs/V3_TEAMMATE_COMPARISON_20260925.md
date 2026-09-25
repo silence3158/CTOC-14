@@ -1,5 +1,76 @@
 # Teammate strategy comparison, 2026-09-25
 
+## Correction after consulting the competition ATK documentation
+
+This section supersedes the zero-revolution reconstruction and its strategic
+interpretation below. The user confirmed personally checking the teammate
+strategy in ATK: raw delta-V is about 9.9 km/s, and F2 about 9.72. The assistant's
+15.28 km/s reconstruction incorrectly restricted every transfer to zero
+revolutions. It must not be used to question the teammate result.
+
+The competition distribution documents the following:
+
+- [Lambert segment guide](../../problem/ctoc14乙题/ATK-CTOC14/Help/html/zh/5.专业使用指南/13-轨道机动规划工具/11-Lambert段.html): initial state is inherited from the preceding segment; the actual final state is passed onward. Single-impulse mode omits the terminal impulse, retaining the actual arrival velocity.
+- [Revolution property](../../problem/ctoc14乙题/ATK-CTOC14/Help/html/zh/二次开发教程/2-二次开发CONNECT模式/2-命令参考/4-Connect机动规划命令库/属性/Lambert段/Revolution.html): the specified revolution value applies only with `Method=AdaptSpecified`.
+- [Method property](../../problem/ctoc14乙题/ATK-CTOC14/Help/html/zh/二次开发教程/2-二次开发CONNECT模式/2-命令参考/4-Connect机动规划命令库/属性/Lambert段/Method.html): `SpecMin` sorts two-body solutions by fuel before correction; the other search modes likewise do not mean a fixed zero-revolution transfer.
+- `IsMajorArc` and `IsLongArc` are also properties of `AdaptSpecified`.
+
+The XML stores `MethodSwitch=1` on all 35 Lambert segments. The public help
+describes named methods rather than publishing this integer's serialization
+mapping. The earlier diagnostic ignored the method entirely and treated the
+stored `Revolution=0` as an unconditional constraint. That inference was wrong.
+Repeated serialized state fields also cannot be treated as mandatory state
+resets: documented execution inherits real states from the preceding segment.
+
+The corrected diagnostic uses fuel-ordered search over both directions and all
+revolution counts admitted by the necessary two-body seed bound for that leg.
+It keeps the original initial state, order, waits, durations and targets. No
+search optimization, target-state reset or ATK execution was performed.
+
+Corrected result:
+
+- Raw delta-V: **9.987178114 km/s**, 35 impulses, duration 9.592126 days.
+- Fixed reconstructed impulses independently checked in nominal J2: **35/35**.
+- Maximum target distance: **0.027882 km**.
+- Conservative altitude lower bound: **203.831941 km**.
+- Diagnostic computation: **9.262 s**, excluding MATLAB startup and loading.
+- Removing the unjustified zero-revolution restriction reduces the locally
+  reconstructed total by **5.290284751 km/s**. Leg 3 alone changes from
+  1.665503 to 0.416350 km/s and changes subsequent arrival velocities.
+- This matches the user's reported 9.9 range. Exact equality with the ATK run's
+  pulse vectors, frame and engine result remains unestablished; this is a
+  reconstruction of a supplied strategy, not a cold-start achievement.
+
+| Metric | Corrected teammate reconstruction | Our 18.34 archive | Our 24.35 archive |
+| --- | ---: | ---: | ---: |
+| Raw delta-V, km/s | 9.987178 | 18.339985 | 24.353595 |
+| Cost through visit 8, km/s | 3.136590 | 4.835413 | 4.222105 |
+| Cost through visit 27, km/s | 7.234185 | 11.746040 | 12.196960 |
+| Remaining cost after visit 27, km/s | 2.752993 | 6.593945 | 12.156635 |
+
+The previous claim that the teammate spends more early to gain later is
+withdrawn: it was based on the incorrect reconstruction. The corrected strategy
+is already cheaper early and also has a cheaper final set. Its nineteen
+post-visit waits longer than 60 s remain a directly observed strategy feature.
+These comparisons do not isolate the causal benefit of any one feature.
+
+Our SEARCH code already exposes multi-revolution branches; the zero-revolution
+restriction was introduced in this diagnostic, not evidence that the search
+itself lacks them. The useful next audit is whether delayed targeted departure
+and multi-revolution opportunities actually receive construction budget and
+survive pruning. Merely adding another inclination penalty does not address
+these opportunities. Neither this comparison nor the competitor's scalar score
+guarantees that our cold search will reach 6.1 km/s.
+
+Corrected artifacts are in
+`runs/v3/diagnostics/tail27_20260925_method_search/`, including `comparison.mat`,
+plan/burn CSV files and `cost_by_coverage.png`. Earlier files are retained as
+historical error evidence and must not be presented as the teammate trajectory.
+The script defaults to `method_search`; `legacy_zero_rev` is an explicitly named
+diagnostic restriction only. No solver/search source files were changed.
+
+## Historical record below: superseded where noted above
+
 ## Scope and evidence boundary
 
 The user supplied `tail27_polished.atk` for diagnostic comparison and confirmed

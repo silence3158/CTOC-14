@@ -1,10 +1,13 @@
-function result=analyze_v3_tail27(initialSource)
+function result=analyze_v3_tail27(initialSource,branchMode)
 %ANALYZE_V3_TAIL27 Diagnostic reconstruction, never a cold-search input.
 if nargin<1, initialSource='configured_start'; end
+if nargin<2, branchMode='method_search'; end
 assert(ismember(initialSource,{'configured_start','cached_coast'}));
+assert(ismember(branchMode,{'method_search','legacy_zero_rev'}));
 sim=fileparts(fileparts(mfilename('fullpath'))); addpath(fullfile(sim,'src'));
 label='tail27_20260925';
 if strcmp(initialSource,'cached_coast'), label=[label '_cached_coast']; end
+if strcmp(branchMode,'method_search'), label=[label '_method_search']; end
 folder=fullfile(sim,'runs/v3/diagnostics',label);
 if ~isfolder(folder), mkdir(folder); end
 assert(~isfile(fullfile(folder,'comparison.mat')),'Do not overwrite diagnostic evidence.');
@@ -20,7 +23,7 @@ x0=state(start); eph=ctocscreen.v3LoadTargetEphemeris(fullfile(sim, ...
  'runs/v3/preprocessing/targets_20260923_release/target_ephemeris.mat'));
 c=ctocscreen.v3Defaults(); c.guided_max_revolutions=0; c.guided_branches=2;
 c.plane_penalty_km_s=0; c.budget_s=30;
-plan=zeros(35,5); time=0; coast=0; k=0; cachedDv=zeros(35,1);
+plan=zeros(35,5); time=0; coast=0; k=0; cachedDv=zeros(35,1); methods=zeros(35,1);
 for j=0:nodes.getLength()-1
  node=nodes.item(j); type=char(node.getAttribute('ComponentType'));
  assert(strcmp(txt(node,'Active'),'1'),'Inactive segment needs explicit handling.');
@@ -32,8 +35,8 @@ for j=0:nodes.getLength()-1
    coast=coast+dt; time=time+dt;
   case 'CMCSLambertTarget'
    assert(strcmp(txt(node,'IsOnedv'),'1')&&strcmp(txt(node,'IsPerturb'),'1'));
-   assert(strcmp(txt(node,'Revolution'),'0'),'This diagnostic expects zero-revolution legs.');
    k=k+1; id=sscanf(attr(node,'CoordSystem/CoordAxes/CoordPoint','Name'),'Target%d');
+   methods(k)=str2double(txt(node,'MethodSwitch'));
    dt=str2double(txt(node,'Duration')); plan(k,:)=[id,coast,time,dt,time+dt];
    cachedDv(k)=str2double(attr(node,'DV1','DV')); coast=0; time=time+dt;
   otherwise
@@ -50,7 +53,8 @@ for j=1:35
 end
 result=struct('purpose','diagnostic_only_not_cold_search_or_original_pulse_verification', ...
  'initial_source',initialSource,'atk_sha256',ctocscreen.v3FileHash(fullfile(sim,'tail27_polished.atk')), ...
- 'branch_rule','zero-revolution minimum departure cost; ATK branch equivalence unverified', ...
+ 'branch_rule',branchMode,'xml_method_switch',methods, ...
+ 'atk_branch_equivalence_verified',false, ...
  'plan',plan,'cached_dv',cachedDv,'target_state_max_component_difference',max(targetDelta), ...
  'initial_state',x0,'elapsed_s',0);
 s=struct('schema_version','free_maneuver_v3','dynamics_id','central_j2', ...
@@ -64,16 +68,22 @@ for j=1:35
  ta=plan(j,3); tb=plan(j,5); id=plan(j,1);
  x=ctocscreen.v3Arc(x,t,ta,eph.model,c,false,true);
  goal=ctocscreen.v3QueryTargets(eph,id,tb,'pairs');
- [dv,detail,alternatives]=ctocscreen.v3GuidedTransfer(x,ta,tb,goal,eph.model,c,tic);
+ if strcmp(branchMode,'method_search')
+  % ATK search modes ignore the specified-revolution field. Enumerate all
+  % revolutions allowed by the necessary two-body seed bound, not a fixed cap.
+  c.guided_max_revolutions=ctocscreen.v3LambertRevolutions(x(1:3),goal,tb-ta,eph.model.mu,Inf);
+  c.guided_branches=2*(1+2*c.guided_max_revolutions);
+ end
+ [dv,detail]=ctocscreen.v3GuidedTransfer(x,ta,tb,goal,eph.model,c,tic);
  s.delta_v_km_s(j,:)=dv.';
  change=ctocscreen.v3PlaneChange(x,dv,c);
  stats(j,:)=[j,id,norm(dv),norm(x(4:6)),norm(x(1:3)), ...
   change.inclination_change_deg,change.plane_rotation_deg,shape(x,eph.model.mu), ...
   shape([x(1:3);x(4:6)+dv],eph.model.mu)];
- x=alternatives{1}.final_state.'; t=tb;
+ x=ctocscreen.v3Arc([x(1:3);x(4:6)+dv],ta,tb,eph.model,c,false,true); t=tb;
  fprintf('LEG %02d target %02d dv %.6f cumulative %.6f speed %.3f di %.3f plane %.3f\n', ...
  j,id,norm(dv),sum(vecnorm(s.delta_v_km_s,2,2)),stats(j,4),stats(j,6:7));
- assert(detail.successful_branches>=1);
+ assert(detail.branches_tried>=1);
 end
 result.reconstructed_schedule=s; result.reconstructed_burns=stats;
 [result.reconstructed_verification,result.reconstructed_trace]=ctocscreen.v3Replay(s,eph,c,true);
