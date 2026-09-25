@@ -5,7 +5,14 @@ tmp/
 
 tools/
 
-tests/
+tests/*
+!tests/TestV3Preprocessing.m
+!tests/TestV3Search.m
+!tests/TestV3RecoveryFlow.m
+!tests/TestV3Diversity.m
+!tests/TestV3Construction.m
+!tests/TestV3Replan.m
+!tests/v3SyntheticFixture.m
 
 reference code/
 

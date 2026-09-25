@@ -1,0 +1,153 @@
+function [pairs,report]=v3CostCandidates(node,eph,c,stream,pheromone,clock)
+%V3COSTCANDIDATES Plane-crossing/time proposals ranked by departure impulse.
+% Lambert is a seed only. Acceptance always uses actual J2 propagation.
+ids=find(~node.visited); pairs={};
+report=struct('propagations',0,'pairs_evaluated',0,'failures',{{}}, ...
+ 'method','plane_windows_lambert_departure_cost','pheromone_queries',0, ...
+ 'nonneutral_queries',0,'prefix_guidance_hits',0,'negative_guidance_hits',0, ...
+ 'estimated_cost_rejections',0,'lambert_calls',0,'time_refinements',0,'natural_windows',0);
+if isempty(ids), return; end
+stageStart=toc(clock); enumerationEnd=stageStart+c.cost_enumeration_fraction*max(0,c.budget_s-stageStart);
+left=eph.model.horizon_s-node.t; slot=left/numel(ids);
+look=min(left,c.cost_lookahead_s);
+dtgrid=unique(min(look,[1800 3600 7200 c.cost_time_budget_factor*slot ...
+ linspace(max(1800,.15*slot),look,c.cost_time_samples)]));
+grid=linspace(node.t,node.t+look,max(3,ceil(look/1200)+1));
+positions=ctocscreen.v3QueryTargets(eph,ids,grid,'grid');
+natural=[];
+try
+ [~,~,natural]=ctocscreen.v3Arc(node.state,node.t,node.t+look,eph.model,c);
+ naturalStates=deval(natural,grid);
+ report.propagations=report.propagations+1;
+catch
+ % Failed lookahead is not a negative observation about a target.
+end
+normal=cross(node.state(1:3),node.state(4:6)); normal=normal/norm(normal);
+allTimes=cell(numel(ids),1);
+for k=1:numel(ids)
+ if toc(clock)>=enumerationEnd, break; end
+ r=reshape(positions(k,:,:),3,[]).'; z=r*normal(:);
+ crossing=find(z(1:end-1).*z(2:end)<=0);
+ ts=dtgrid; nearTimes=[];
+ if ~isempty(natural)
+  miss=vecnorm(r-naturalStates(1:3,:).',2,2);
+  minima=find(miss(2:end-1)<=miss(1:end-2)&miss(2:end-1)<=miss(3:end))+1;
+  [~,sorted]=sort(miss(minima));
+  for jj=minima(sorted(1:min(c.cost_natural_windows,numel(sorted)))).'
+   if toc(clock)>=enumerationEnd, break; end
+   try
+    t=fminbnd(@naturalMiss,grid(jj-1),grid(jj+1),optimset('Display','off','MaxFunEvals',15,'TolX',1));
+    nearTimes(end+1)=t-node.t; report.natural_windows=report.natural_windows+1;
+   catch
+   end
+  end
+ end
+ for j=crossing(:).'
+  if toc(clock)>=enumerationEnd, break; end
+  try
+   t=fzero(@(t)dot(ctocscreen.v3QueryTargets(eph,ids(k),t),normal),grid(j:j+1));
+   ts=[ts,t-node.t+[-600 0 600]];
+  catch
+   % A failed window root is not evidence against the target.
+  end
+ end
+ if isempty(node.schedule.maneuver_times_s)&&isfield(node,'seed_target')&&node.seed_target==ids(k)
+  ts=[ts node.seed_duration_s];
+ end
+ ts=unique(ts(ts>=c.action_min_duration_s&ts<=look));
+ % Cover middle/long times before the short-time tail if the stage expires.
+ indices=unique([ceil(numel(ts)/2),numel(ts),1,ceil(numel(ts)/4),ceil(3*numel(ts)/4),1:numel(ts)],'stable');
+ indices=indices(indices>=1&indices<=numel(ts)); ts=ts(indices);
+ if isempty(node.schedule.maneuver_times_s)&&isfield(node,'seed_target')&&node.seed_target==ids(k)
+  [~,hint]=min(abs(ts-node.seed_duration_s)); ts=ts([hint setdiff(1:numel(ts),hint,'stable')]);
+ end
+ allTimes{k}=unique([nearTimes,ts],'stable');
+ if isfield(node,'guidance_times_s')
+  hint=node.guidance_times_s(ids(k))-node.t;
+  if isfinite(hint)&&hint>=c.action_min_duration_s&&hint<=look
+   allTimes{k}=unique([hint,allTimes{k}],'stable');
+  end
+ end
+end
+% Interleave targets so a wall deadline cannot always exclude the last IDs.
+order=randperm(stream,numel(ids));
+if isfield(node,'priority_targets')
+ focus=ismember(ids(order),node.priority_targets);
+ order=[order(focus),order(~focus)];
+end
+for round=1:max(cellfun(@numel,allTimes))
+ for k=order
+  if toc(clock)>=enumerationEnd, break; end
+  if round>numel(allTimes{k}), continue; end
+  dt=allTimes{k}(round);
+  if toc(clock)>=enumerationEnd, break; end
+  try
+   [best,chosen,raw,plane]=ctocscreen.v3LambertScore(node,ids(k),dt,eph,c);
+   report.lambert_calls=report.lambert_calls+1;
+   if isempty(chosen), continue; end
+   % Estimated cost never causes negative learning; only a corrected impulse does.
+   if node.J+raw>c.search_max_dv_km_s*c.rejected_proposal_factor*1.15
+    report.estimated_cost_rejections=report.estimated_cost_rejections+1; continue;
+   end
+   key=ctocscreen.v3StateKey(node,3,ids(k),dt,c);
+   [exact,~,a]=ctocscreen.v3Pheromone('get',pheromone,key,0,c);
+   policyKey=ctocscreen.v3PolicyKey(node,3,ids(k),dt);
+   [backoff,~,b]=ctocscreen.v3Pheromone('get',pheromone,policyKey,0,c);
+   ph=exact*backoff/c.pheromone_baseline;
+   report.pheromone_queries=report.pheromone_queries+1;
+   report.nonneutral_queries=report.nonneutral_queries+(abs(ph-c.pheromone_baseline)>1e-12);
+   report.prefix_guidance_hits=report.prefix_guidance_hits+(a.prefix_increment+b.prefix_increment>0);
+   report.negative_guidance_hits=report.negative_guidance_hits+(b.negative_penalty>0);
+   pairs{end+1}=struct('target',ids(k),'dt',dt,'estimate',best,'estimated_dv_km_s',raw, ...
+    'estimated_inclination_change_deg',plane.inclination_change_deg, ...
+    'pheromone',ph,'natural_miss_km',NaN,'weight',0,'v_depart',chosen);
+  catch err
+   report.failures{end+1}=struct('id',err.identifier,'message',err.message,'dt',dt);
+  end
+ end
+ if toc(clock)>=enumerationEnd, break; end
+end
+report.pairs_evaluated=numel(pairs);
+if isempty(pairs), return; end
+scores=cellfun(@(p)p.estimate,pairs); [~,rank]=sort(scores);
+refined=0; selectedTargets=[];
+for index=rank
+ if refined>=c.cost_refine_count||toc(clock)>=c.budget_s, break; end
+ original=pairs{index};
+ if ismember(original.target,selectedTargets), continue; end
+ selectedTargets(end+1)=original.target; refined=refined+1;
+ width=max(600,.15*original.dt); lo=max(c.action_min_duration_s,original.dt-width); hi=min(look,original.dt+width);
+ try
+  t=fminbnd(@objective,lo,hi,optimset('Display','off','MaxFunEvals',18,'TolX',1));
+  [score,v,dv,p]=ctocscreen.v3LambertScore(node,original.target,t,eph,c);
+  if score<original.estimate&&~isempty(v)
+   report.time_refinements=report.time_refinements+1;
+   item=original; item.dt=t; item.estimate=score; item.estimated_dv_km_s=dv;
+   item.estimated_inclination_change_deg=p.inclination_change_deg; item.v_depart=v;
+   key=ctocscreen.v3StateKey(node,3,item.target,t,c);
+   exact=ctocscreen.v3Pheromone('get',pheromone,key,0,c);
+   backoff=ctocscreen.v3Pheromone('get',pheromone,ctocscreen.v3PolicyKey(node,3,item.target,t),0,c);
+   item.pheromone=exact*backoff/c.pheromone_baseline; pairs{end+1}=item;
+  end
+ catch
+  % Retain the coarse seed if local time refinement cannot improve it.
+ end
+end
+scores=cellfun(@(p)p.estimate,pairs); minimum=min(scores);
+scale=max(.05,min(.5,(c.search_max_dv_km_s-node.J)/max(1,numel(ids))));
+for k=1:numel(pairs)
+ boost=1;
+ if isfield(node,'priority_targets')&&ismember(pairs{k}.target,node.priority_targets), boost=2; end
+ pairs{k}.weight=boost*pairs{k}.pheromone^c.pheromone_alpha*exp(-min(50,(scores(k)-minimum)/scale));
+end
+ function value=objective(t)
+  value=1e6;
+  if toc(clock)>=c.budget_s, return; end
+  try, value=ctocscreen.v3LambertScore(node,original.target,t,eph,c); catch, end
+  if ~isfinite(value), value=1e6; end
+ end
+ function value=naturalMiss(t)
+  x=deval(natural,t); target=ctocscreen.v3QueryTargets(eph,ids(k),t);
+  value=sum((x(1:3).'-target).^2);
+ end
+end
