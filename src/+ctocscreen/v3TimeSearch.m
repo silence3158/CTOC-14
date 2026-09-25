@@ -25,13 +25,19 @@ for k=1:min(c.guided_attempts-numel(selected),numel(available))
   end
  end
  weights=cellfun(@(p)p.weight,pairs(choices));
- if rand(stream)<c.branch_greedy_probability
+ % Guard the selection: a degenerate or non-finite weight vector must not turn
+ % pick into a non-scalar, which would invalidate the index downstream.
+ if isempty(weights)||any(~isfinite(weights))||sum(weights)<=0
+  pick=1;
+ elseif rand(stream)<c.branch_greedy_probability
   [~,pick]=max(weights);
  else
   if c.cost_guidance_enabled, weights=weights/sum(weights);
   else, weights=(1-c.exploration)*weights/sum(weights)+c.exploration/numel(weights); end
   pick=find(cumsum(weights)>=rand(stream),1);
+  if isempty(pick), pick=numel(weights); end
  end
+ pick=pick(1);
  selected(end+1)=choices(pick); available(available==choices(pick))=[];
 end
 % Each selected pair receives a share before any local time polishing.
