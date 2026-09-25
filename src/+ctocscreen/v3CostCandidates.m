@@ -154,7 +154,7 @@ for k=1:numel(pairs)
  % Family separation: a leg that leaves the current altitude band or plane
  % commits the tour to a return trip. This is a ranking term only; the real
  % cost stays the propagated J2 impulse and the acceptance gate is unchanged.
- sep=ctocscreen.v3FamilySeparation(node.t,eph,pairs{k}.target,c,homeBand,homeInc);
+ sep=ctocscreen.v3FamilySeparation(node.t,pairs{k}.dt,eph,pairs{k}.target,c,homeBand,homeInc);
  % Family completion: the last targets of a nearly finished family are the
  % cheapest way to stop paying that round trip; PHASING-INCREMENT rewards legs
  % cheaper than the running tour average (the cheap insertions that make the

@@ -15,11 +15,15 @@ fprintf('FAMILY target planes: %s deg\n',mat2str(round(unique(round(inc/10)*10))
 same=find(abs(a-min(a))<1e3,1); far=find(inc>max(inc)-1,1);
 assert(~isempty(same)&&~isempty(far),'fixture selection failed');
 homeBand=round(a(same)/2.5e3); homeInc=inc(same);
-[sepSame,detailSame]=ctocscreen.v3FamilySeparation(0,eph,same,c,homeBand,homeInc);
-[sepPlane,~]=ctocscreen.v3FamilySeparation(0,eph,far,c,homeBand,homeInc);
+[sepSame,detailSame]=ctocscreen.v3FamilySeparation(0,600,eph,same,c,homeBand,homeInc);
+[sepPlane,~]=ctocscreen.v3FamilySeparation(0,600,eph,far,c,homeBand,homeInc);
 bandTarget=find(abs(a-max(a))<1e3,1);
-[sepBand,~]=ctocscreen.v3FamilySeparation(0,eph,bandTarget,c,homeBand,homeInc);
-assert(sepSame==0,'same-family separation should be exactly 0');
+[sepBand,detailBand]=ctocscreen.v3FamilySeparation(0,600,eph,bandTarget,c,homeBand,homeInc);
+assert(detailSame.arrival_epoch_s==600,'separation must be evaluated at the arrival epoch');
+assert(detailBand.arrival_epoch_s==600,'band fixture must use the arrival epoch');
+% Same-family separation is zero up to the floating-point drift of a J2 orbit
+% between the departure epoch and the arrival epoch (measured ~2.6e-7 km/s).
+assert(sepSame<1e-4,'same-family separation should be ~0');
 assert(sepPlane>sepSame,'plane change must cost more than staying in plane');
 assert(~detailSame.band_change,'same band flagged as a band change');
 % The candidate ranking must react: ask for proposals with a small lookahead and

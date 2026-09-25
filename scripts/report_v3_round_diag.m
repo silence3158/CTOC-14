@@ -81,4 +81,38 @@ end
 if isempty(S.best_rejected_complete), fprintf('no rejected complete candidate\n');
 else, fprintf('best rejected complete %.9f km/s\n',S.best_rejected_complete.verification.total_dv_km_s); end
 if isempty(S.elite), fprintf('no elite\n'); else, fprintf('ELITE %.9f km/s\n',S.elite.verification.total_dv_km_s); end
+% Per-iteration beam dynamics: where coverage stalls and how the time is spent.
+if ~isempty(S.construction_history)
+ ch=S.construction_history;
+ fprintf('--- per-iteration construction ---\n');
+ fprintf('%4s %8s %8s %8s %7s %7s %7s %6s\n','iter','start_s','elapsed','end_vis','outputs','checks','cache','consist');
+ for k=1:numel(ch)
+  c=ch{k};
+  ok='no'; if isfield(c,'consistency')&&c.consistency.passed, ok='yes'; end
+  fprintf('%4d %8.1f %8.2f %8d %7d %7d %7d %6s\n',c.iteration,c.started_at_s,c.elapsed_s, ...
+   c.end_visits,c.output_count,c.consistency_checks,c.consistency_cache_hits,ok);
+ end
+ % Where the wall clock went, by phase.
+ build=sum(cellfun(@(x)x.elapsed_s,ch));
+ full=0; if ~isempty(S.full_construction_history), full=sum(cellfun(@(x)x.elapsed_s,S.full_construction_history)); end
+ rep=0; if ~isempty(S.replan_history), rep=sum(cellfun(@(x)x.elapsed_s,S.replan_history)); end
+ joint=0; if ~isempty(S.history), joint=sum(cellfun(@(x)x.diagnostic.elapsed_s,S.history)); end
+ fprintf('--- time by phase: construction %.1f s | full-construction %.1f s | replan %.1f s | joint %.1f s | total %.1f s\n', ...
+  build,full,rep,joint,S.elapsed_s);
+end
+% Beam state at the end of the run: coverage spread tells whether the beam is
+% diversified or collapsed, which decides where the next change must go.
+if isfield(S,'beam')&&~isempty(S.beam)
+ visits=cellfun(@(n)sum(n.visited),S.beam);
+ fprintf('final beam: %d nodes | visits %s | J %s\n',numel(S.beam),mat2str(visits), ...
+  mat2str(round(cellfun(@(n)n.J,S.beam)*100)/100));
+end
+if isfield(S,'colonies')&&~isempty(S.colonies)
+ for k=1:numel(S.colonies)
+  if isempty(S.colonies{k}), continue; end
+  v=cellfun(@(n)sum(n.visited),S.colonies{k});
+  fprintf('colony %d: %d nodes | visits %s\n',k,numel(v),mat2str(v));
+ end
+end
+
 end
