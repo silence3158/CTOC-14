@@ -1,5 +1,12 @@
-function roots=v3Roots(eph,c,stream)
+function [roots,planeTable]=v3Roots(eph,c,stream)
 %V3ROOTS Actual six-dimensional initial-orbit diversity, not RNG labels alone.
+% The deterministic families cycle through the REAL target planes (rounded to a
+% few degrees) instead of a fixed two-entry tilt list, because the initial plane
+% is a free design variable and the measured tour cost depends on it (13.9 to
+% 42.0 km/s over 12 roots on the competition data).
+% The plane table is always built: it drives the deterministic root families and
+% is only exposed as a second output for inspection.
+[planeTable,planeCounts,planeMembers]=ctocscreen.v3TargetPlanes(eph,c); %#ok<ASGLU>end
 roots=cell(1,c.root_count);
 for k=1:c.root_count
  e=.000999*sqrt(rand(stream)); w=2*pi*rand(stream);
@@ -19,18 +26,27 @@ for k=1:c.root_count
   method='target_geometry';
  end
  if c.cost_guidance_enabled&&k<=ceil(c.root_count/2)
-  % Low-inclination starts are a proposal family, not a fixed initial plane.
-  radii=vecnorm(eph.states0(:,1:3),2,2);
-  angular=cross(eph.states0(:,1:3),eph.states0(:,4:6),2);
-  inclinations=acosd(angular(:,3)./vecnorm(angular,2,2));
-  low=find(inclinations<5); if isempty(low), low=(1:35).'; end
-  [~,sorted]=sort(radii(low)); near=low(sorted);
-  target=near(1+mod(floor((k-1)/2),min(2,numel(near))));
-  duration=pi*sqrt(((q(1)+radii(target))/2)^3/eph.model.mu);
+  % Cycle deterministically through the distinct real target planes, carrying at
+  % least one representative target for each. This is still a proposal family:
+  % nothing here is a physical constraint and waiting is always replayed in J2.
+  if ~isempty(planeTable)
+   planeIndex=1+mod(k-1,numel(planeTable));
+   tilt=deg2rad(planeTable{planeIndex})+deg2rad(2*rand(stream));
+   members=planeMembers{planeIndex};
+   target=members(1+mod(k-1,numel(members)));
+  else
+   radii=vecnorm(eph.states0(:,1:3),2,2);
+   angular=cross(eph.states0(:,1:3),eph.states0(:,4:6),2);
+   inclinations=acosd(angular(:,3)./vecnorm(angular,2,2));
+   low=find(inclinations<5); if isempty(low), low=(1:35).'; end
+   [~,sorted]=sort(radii(low)); near=low(sorted);
+   target=near(1+mod(floor((k-1)/2),min(2,numel(near))));
+   tilt=deg2rad(c.root_plane_tilts_deg(1+mod(k-1,numel(c.root_plane_tilts_deg))))+deg2rad(2*rand(stream));
+  end
+  duration=pi*sqrt(((q(1)+norm(ctocscreen.v3QueryTargets(eph,target,0)))/2)^3/eph.model.mu);
   duration=min([.8*eph.model.horizon_s,eph.model.horizon_s-wait,duration]);
   r=ctocscreen.v3QueryTargets(eph,target,wait+duration); direction=r/norm(r);
   minimumTilt=asin(abs(direction(3)));
-  tilt=deg2rad(c.root_plane_tilts_deg(1+mod(k-1,numel(c.root_plane_tilts_deg))))+deg2rad(2*rand(stream));
   tilt=max(minimumTilt+1e-8,min(pi-minimumTilt-1e-8,tilt));
   pole=[0 0 1]-direction(3)*direction; pole=pole/norm(pole);
   turn=acos(max(-1,min(1,cos(tilt)/pole(3))));
