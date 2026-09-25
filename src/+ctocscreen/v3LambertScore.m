@@ -18,4 +18,15 @@ end
 slot=ctocscreen.v3TimeAllowance(node,id,eph);
 % Reserve time softly across the mission; do not impose an equal-share leg cap.
 score=score+c.cost_time_weight_km_s*dt/max(slot,1);
+% Task-time feasibility pressure. A leg can be cheap and still ruin the tour by
+% spending time the remaining targets need: with a 10-day horizon, 35 targets and
+% ~24 h target periods, the per-target time share decides whether a cheap
+% far-future leg is affordable. Ranking term only; bounded, and it never replaces
+% the real propagated cost.
+remainingTime=max(1,eph.model.horizon_s-(node.t+dt));
+targetsLeft=max(1,numel(find(~node.visited)));
+share=remainingTime/targetsLeft;
+if dt>c.time_share_slack*share
+ score=score+c.time_pressure_km_s*(dt/(c.time_share_slack*share)-1);
+end
 end
