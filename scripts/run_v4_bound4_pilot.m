@@ -25,7 +25,7 @@ stats=struct('expanded',0,'generated',0,'over_cost',0,'duplicate_children',0, ..
  'guidance_failures',0,'backtracks',0,'four_burn_backtracks',0,'short_backtracks',0, ...
  'deferred_resumes',0,'roots',0,'unique_edges',0,'expansion_seconds',0);
 fid=fopen(fullfile(folder,'events.jsonl'),'w','n','UTF-8'); assert(fid>0);
-cleanup=onCleanup(@()fclose(fid)); %#ok<NASGU>
+cleanup=onCleanup(@()fclose(fid));
 tick=0; deadline=budget-reserve;
 while toc(clock)<deadline-0.1
  tick=tick+1; slot=1+mod(tick-1,4);
@@ -67,13 +67,13 @@ while toc(clock)<deadline-0.1
     +child.actual.inclination_penalty+c.time_weight*35*max(0,child.q.T/864000-child.actual.visit_count/35)]; %#ok<AGROW>
   end
   if ~isempty(childIds), [~,ord]=sortrows(scores,[1 2]); rec.children=childIds(ord); end
-  nodes{id}=rec;
+  nodes{id}=rec; %#ok<AGROW>
   record('expand',struct('node',id,'root',rec.node.root_id,'visits',rec.node.actual.visit_count, ...
    'dv',rec.node.actual.total_dv_km_s,'admitted',numel(rec.children), ...
    'over_cost',rec.over_cost,'guidance_failures',er.failed_guidance,'seconds',er.seconds));
  end
  if rec.next<=numel(rec.children)
-  cid=rec.children(rec.next); rec.next=rec.next+1; nodes{id}=rec;
+  cid=rec.children(rec.next); rec.next=rec.next+1; nodes{id}=rec; %#ok<AGROW>
   assert(~edgeTaken(cid),'Repeated branch traversal.'); edgeTaken(cid)=true;
   stats.unique_edges=stats.unique_edges+1;
   slots(slot).path=[path,cid];
@@ -155,7 +155,7 @@ fprintf('STATS roots=%d expanded=%d overcost=%d backtracks=%d four=%d duplicate_
  end
  function rollback(slot)
   path=slots(slot).path; current=nodes{path(end)};
-  if numel(path)==1
+  if isscalar(path)
    slots(slot).path=[];
    while ~isempty(slots(slot).deferred)
     saved=slots(slot).deferred{end}; slots(slot).deferred(end)=[];
@@ -193,7 +193,7 @@ fprintf('STATS roots=%d expanded=%d overcost=%d backtracks=%d four=%d duplicate_
  end
 end
 function assertPrefix(p,q)
-M=numel(p.tau);
-assert(numel(q.tau)>=M&&isequal(p.x0,q.x0)&&isequal(p.tau,q.tau(1:M)) ...
+M=numel(p.tau); retainedTimes=q.tau(1:M);
+assert(numel(q.tau)>=M&&isequal(p.x0,q.x0)&&isequal(p.tau(:),retainedTimes(:)) ...
  &&isequal(p.u,q.u(1:M,:)),'Physical prefix changed.');
 end
