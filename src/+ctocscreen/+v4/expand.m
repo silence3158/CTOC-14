@@ -32,9 +32,11 @@ for it=1:numel(dt)
 end
 pairs=pairs(randperm(stream,size(pairs,1)),:);
 seeds=struct('target',{},'arrival',{},'departure',{},'x',{},'v',{},'score',{});
-enumerationEnd=min(budget*.45,toc(clock)+max(.2,budget*.3));
+% The enumeration share is measured from its own start: a slow coast replay must
+% not consume the whole window, and at least one proposal is always attempted.
+enumerationEnd=toc(clock)+max(.2,.45*(budget-toc(clock)));
 for index=1:size(pairs,1)
- if toc(clock)>=enumerationEnd, break; end
+ if index>1&&toc(clock)>=enumerationEnd, break; end
  id=chosen(pairs(index,1)); duration=dt(pairs(index,2)); wait=0;
  if mod(index,4)==0, wait=min(duration*.25,3600); end
  if wait>0

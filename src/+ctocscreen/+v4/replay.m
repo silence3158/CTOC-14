@@ -10,7 +10,7 @@ out=struct('passed',false,'status','invalid','visit_count',0,'distance_km',inf(3
  'independent',independent,'official_alignment_verified',false, ...
  'failure_id','','failure_reason','','reused_prefix',false);
 tr=struct('q',q,'times',[],'pre',zeros(6,0),'post',zeros(6,0), ...
- 'arcs',{{}},'arc_start',[],'arc_end',[],'heights',{{}},'key','');
+ 'arcs',{{}},'arc_start',[],'arc_end',[],'heights',{{}},'scans',{{}},'key','');
 out.dataset_kind='competition_targets_nominal_model';
 if isfield(eph,'synthetic')&&eph.synthetic, out.dataset_kind='synthetic_test_only'; end
 try
@@ -29,6 +29,32 @@ try
   out.independent=false; out.reused_prefix=true; out.passed=false;
   tr=parent.trace; tr.q=q; tr.key=ctocscreen.v4.controlKey(q);
   offset=numel(tr.times)-1;
+ elseif ~independent&&~isempty(parent)
+  % Same controls through the parent's last impulse: keep the arcs before it,
+  % recompute only from there. Identical knots give the from-epoch computation.
+  j=truncatedReuse(q,parent);
+  if j>0
+   keep=1:j-1; tr=parent.trace; tr.q=q; tr.key=ctocscreen.v4.controlKey(q);
+   tr.times=tr.times(1:j); tr.pre=tr.pre(:,1:j); tr.post=tr.post(:,1:j);
+   tr.arcs=tr.arcs(keep); tr.arc_start=tr.arc_start(keep); tr.arc_end=tr.arc_end(keep);
+   tr.heights=tr.heights(keep); tr.scans=tr.scans(keep);
+   for k=keep
+    h=tr.heights{k}; height=height&&h.passed;
+    out.min_altitude_lower_km=min(out.min_altitude_lower_km,h.lower_bound_altitude_km);
+    out.sampled_min_altitude_km=min(out.sampled_min_altitude_km,h.sampled_min_altitude_km);
+    % Scans read witness hints; rescan an arc whose relevant hints changed.
+    a0=tr.arc_start(k); a1=tr.arc_end(k); w1=q.witness(:); w0=parent.trace.q.witness(:);
+    inside=(w1>=a0&w1<=a1)|(w0>=a0&w0<=a1);
+    if ~isequaln(w1(inside),w0(inside))
+     visits=ctocscreen.v3ScanArc(tr.arcs{k},tq,c,q.witness);
+     tr.scans{k}=struct('distance_km',visits.distance_km,'time_s',visits.time_s);
+    end
+    better=tr.scans{k}.distance_km<out.distance_km;
+    out.distance_km(better)=tr.scans{k}.distance_km(better);
+    out.witness_times_s(better)=tr.scans{k}.time_s(better);
+   end
+   start=tr.times(j); x=tr.pre(:,j); offset=j-1; out.reused_prefix=true;
+  end
  end
  knots=unique([start;q.tau(q.tau>=start);q.T]);
  for k=1:numel(knots)
@@ -46,6 +72,7 @@ try
   out.min_altitude_lower_km=min(out.min_altitude_lower_km,h.lower_bound_altitude_km);
   out.sampled_min_altitude_km=min(out.sampled_min_altitude_km,h.sampled_min_altitude_km);
   visits=ctocscreen.v3ScanArc(sol,tq,c,q.witness);
+  tr.scans{end+1}=struct('distance_km',visits.distance_km,'time_s',visits.time_s);
   better=visits.distance_km<out.distance_km;
   out.distance_km(better)=visits.distance_km(better);
   out.witness_times_s(better)=visits.time_s(better);
@@ -90,6 +117,22 @@ end
    r=permute(reshape(r,ni,nt,3),[1 3 2]); v=permute(reshape(v,ni,nt,3),[1 3 2]);
   end
  end
+end
+function j=truncatedReuse(q,parent)
+% Trace index of the latest parent impulse knot t* such that the child also
+% has an impulse at t* and identical controls before it; 0 when none exists.
+% The child's knots before t* then match, so reuse equals the epoch replay.
+j=0; p=parent.q; tr=parent.trace;
+if isempty(p.tau)||~isfield(tr,'scans')||numel(tr.scans)~=numel(tr.arcs), return; end
+if ~isequal(q.x0,p.x0)||~strcmp(tr.key,ctocscreen.v4.controlKey(p)), return; end
+for k=numel(p.tau):-1:1
+ t=p.tau(k); before=q.tau<t;
+ if ~any(q.tau==t)||sum(before)~=k-1, continue; end
+ if ~isequal(q.tau(before),p.tau(1:k-1))||~isequal(q.u(before,:),p.u(1:k-1,:)), continue; end
+ i=find(tr.times==t,1);
+ if ~isempty(i)&&numel(tr.arc_end)>=i-1&&all(tr.arc_end(1:i-1)<=t), j=i; end
+ return
+end
 end
 function yes=canReuse(q,p)
 n=numel(p.tau);

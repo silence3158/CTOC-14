@@ -9,7 +9,7 @@ manifest=struct('config',c,'signature',signature,'target_signature',eph.signatur
 save(fullfile(folder,'manifest.mat'),'manifest');
 fid=fopen(fullfile(folder,'events.jsonl'),'w','n','UTF-8'); assert(fid>0); cleanup=onCleanup(@()fclose(fid)); %#ok<NASGU>
 events={}; joints={}; warm={}; pending={}; best=[]; bestComplete=[]; bestVerified=[]; verifiedKeys={};
-checkpoint=[]; checkpointElapsed=NaN; checkpointReport=[];
+checkpoint=[]; checkpointElapsed=NaN; checkpointReport=[]; sharedTabu=struct('keys',{{}},'failures',[]); structureCount=0;
 nextRoot=1; rootServices=zeros(1,16); stats=struct('rounds',0,'root_count',0,'expanded',0,'generated',0, ...
  'shared_calls',0,'full_calls',0,'structure_calls',0,'resume_calls',0,'joint_iterations',0, ...
  'actual_joint_improvements',0,'suffix_rebuilds',0,'independent_checks',0,'complete_found',0, ...
@@ -67,12 +67,10 @@ while toc(clock)<deadline
   stats.resume_calls=stats.resume_calls+1; addJoint(jr,wr);
   if ~isempty(child), children{end+1}=child; consider(child); end
  end
- % One scheduled shared-arc job; the next service opens an expanded window.
+ % One shared-arc job; its scope escalates with executed failures of that task.
  if ~isempty(children)&&toc(clock)<deadline
   counts=cellfun(@(n)n.actual.visit_count,children); [~,j]=max(counts); selected=children{j};
-  scope='local'; allowance=c.scope_seconds(1);
-  if mod(iteration,3)==0, scope='expanded'; allowance=c.scope_seconds(2); end
-  [child,jr,wr]=ctocscreen.v4.shared(selected,eph,c,min(allowance,deadline-toc(clock)),scope);
+  [child,jr,wr,sharedTabu]=ctocscreen.v4.shared(selected,eph,c,min(c.scope_seconds,deadline-toc(clock)),sharedTabu);
   stats.shared_calls=stats.shared_calls+1; addJoint(jr,wr);
   if ~isempty(child), children{end+1}=child; consider(child); end
  end
@@ -93,15 +91,27 @@ while toc(clock)<deadline
    if ~isempty(child), child.origin='full_history'; children{end+1}=child; consider(child); end
   end
  end
- if mod(iteration,c.structure_every)==0&&toc(clock)<deadline&&parent.q.T<eph.model.horizon_s-1
-  [child,jr,wr]=ctocscreen.v4.restructure(parent,eph,c,iteration,min(c.scope_seconds(2),deadline-toc(clock)));
-  stats.structure_calls=stats.structure_calls+1; addJoint(jr,wr);
+ if mod(iteration,c.structure_every)==0&&toc(clock)<deadline
+  % A fresh root has no control history; use the best-covered nonempty trajectory.
+  target=parent;
+  if target.q.T<=0||target.q.T>=eph.model.horizon_s-1
+   pool=[beam,children]; ok=cellfun(@(n)n.q.T>0&&n.q.T<eph.model.horizon_s-1,pool);
+   target=[];
+   if any(ok)
+    pool=pool(ok); counts=cellfun(@(n)n.actual.visit_count,pool); [~,j]=max(counts); target=pool{j};
+   end
+  end
+  if ~isempty(target)
+   structureCount=structureCount+1;
+   [child,jr,wr]=ctocscreen.v4.restructure(target,eph,c,structureCount,min(c.scope_seconds(2),deadline-toc(clock)));
+   stats.structure_calls=stats.structure_calls+1; jr.structure_index=structureCount; addJoint(jr,wr);
    if ~isempty(child)
     if strcmp(child.origin,'suffix_rebuild')
      child.root_id=nextRoot; nextRoot=nextRoot+1; stats.suffix_rebuilds=stats.suffix_rebuilds+1;
     end
     children{end+1}=child; consider(child);
    end
+  end
  end
  children=children(cellfun(@(n)~strcmp(n.actual.status,'propagation_failure') ...
   &&n.actual.initial_passed&&n.actual.height_passed&&isfinite(n.actual.total_dv_km_s),children));

@@ -53,7 +53,9 @@ reuseError=norm(ct.post(:,end)-ft.post(:,end));
 assert(cached.reused_prefix&&reuseError<1e-5&&cached.visit_count==fresh.visit_count);
 long.tau(end)=480; [delayed,dt]=ctocscreen.v4.replay(long,eph,c,false,parent);
 [fromZero,zt]=ctocscreen.v4.replay(long,eph,c);
-assert(~delayed.reused_prefix&&isequal(dt.post,zt.post)&&delayed.visit_count==fromZero.visit_count);
+% Since 2026-09-26 reuse may stop at the parent's last impulse; it must still
+% equal the epoch replay exactly.
+assert(isequal(dt.post,zt.post)&&delayed.visit_count==fromZero.visit_count);
 % A preceding screen must not suppress independent positive reinforcement.
 reward=node; reward.q.u=q.u/100; [reward.actual,reward.trace]=ctocscreen.v4.replay(reward.q,eph,c);
 reward.actual.passed=true; reward.actual.independent=false;

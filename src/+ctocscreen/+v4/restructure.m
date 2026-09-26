@@ -1,11 +1,13 @@
-function [child,report,warm]=restructure(parent,eph,c,iteration,budget)
+function [child,report,warm]=restructure(parent,eph,c,index,budget)
 %RESTRUCTURE Changed topology is a new task; actual old coverage is re-evaluated.
+% index counts executed structure services, so the five operators rotate
+% independently of root or full-history rounds.
 clock=tic; child=[]; warm=[]; report=struct('status','no_structure','seconds',0,'iterations',0);
 q=parent.q; M=numel(q.tau); if q.T<=0, return; end
-kind=mod(floor(iteration/c.structure_every)-1,5);
+kind=mod(index-1,5);
 if M==0, kind=1; end
 if kind==4
- [child,report]=ctocscreen.v4.rebuild(parent,eph,c,1+floor(iteration/(5*c.structure_every)));
+ [child,report]=ctocscreen.v4.rebuild(parent,eph,c,ceil(index/5));
  return
 end
 ids=find(parent.actual.distance_km<=1); theta=parent.actual.witness_times_s(ids);
@@ -17,7 +19,7 @@ switch kind
   edges=[0;q.tau;q.T]; [~,k]=max(diff(edges)); focus=(edges(k)+edges(k+1))/2;
   q.tau(end+1,1)=focus; q.u(end+1,:)=zeros(1,3); name='insert_zero';
  case 2
-  k=1+mod(iteration-1,M); focus=q.tau(k);
+  k=1+mod(index-1,M); focus=q.tau(k);
   q.tau(k)=max(0,min(q.T-1,focus+.2*c.window_radius_s)); name='move_event';
  otherwise
   [~,k]=max(vecnorm(q.u,2,2)); focus=q.tau(k);
