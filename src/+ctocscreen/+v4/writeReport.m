@@ -11,6 +11,13 @@ fprintf(fid,'Source signature unchanged: %d. Empty historical input: 1. Official
 fprintf(fid,'Full-history B calls: %d. Shared-arc calls: %d. Structure calls: %d. Joint iterations: %d.\n\n', ...
  s.full_calls,s.shared_calls,s.structure_calls,s.joint_iterations);
 fprintf(fid,'Search pool threshold: 6.1 km/s. User notification threshold: <8 km/s with independent 35/35.\n\n');
+fprintf(fid,'Actual joint improvements retaining their active targets: %d (may be partial missions).\n\n',s.actual_joint_improvements);
+if isfield(result,'checkpoint_verification')&&~isempty(result.checkpoint_verification)
+ cp=result.checkpoint_verification;
+ fprintf(fid,'Same-run candidate captured at %.3f s (limit %.1f s): independent **%d/35**, raw **%.12f km/s**. ', ...
+  result.checkpoint_candidate_elapsed_s,c.checkpoint_s,cp.visit_count,cp.total_dv_km_s);
+ fprintf(fid,'Checkpoint verification was performed after search, not within that capture budget.\n\n');
+end
 fprintf(fid,'| Target | Independent distance (km) | Witness time (s) | Visited |\n|---|---:|---:|---:|\n');
 for j=1:35, fprintf(fid,'| %d | %.12g | %.9f | %d |\n',j,a.distance_km(j),a.witness_times_s(j),a.distance_km(j)<=1); end
 fprintf(fid,'\n## Controls\n\n| Pulse | Time (s) | dv-x | dv-y | dv-z | Magnitude (km/s) |\n|---|---:|---:|---:|---:|---:|\n');

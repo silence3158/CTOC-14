@@ -9,6 +9,7 @@ manifest=struct('config',c,'signature',signature,'target_signature',eph.signatur
 save(fullfile(folder,'manifest.mat'),'manifest');
 fid=fopen(fullfile(folder,'events.jsonl'),'w','n','UTF-8'); assert(fid>0); cleanup=onCleanup(@()fclose(fid)); %#ok<NASGU>
 events={}; joints={}; warm={}; pending={}; best=[]; bestComplete=[]; bestVerified=[]; verifiedKeys={};
+checkpoint=[]; checkpointElapsed=NaN; checkpointReport=[];
 nextRoot=1; rootServices=zeros(1,16); stats=struct('rounds',0,'root_count',0,'expanded',0,'generated',0, ...
  'shared_calls',0,'full_calls',0,'structure_calls',0,'resume_calls',0,'joint_iterations',0, ...
  'actual_joint_improvements',0,'suffix_rebuilds',0,'independent_checks',0,'complete_found',0, ...
@@ -120,6 +121,7 @@ while toc(clock)<deadline
 end
 stats.search_seconds=toc(clock);
 chosen=best; if ~isempty(bestComplete), chosen=bestComplete; end
+if ~isempty(bestVerified), chosen=bestVerified; end
 if ~isempty(bestVerified)&&strcmp(ctocscreen.v4.controlKey(chosen.q),ctocscreen.v4.controlKey(bestVerified.q))
  verification=bestVerified.actual; vtrace=bestVerified.trace;
 else
@@ -132,12 +134,28 @@ if verification.passed
  if isempty(bestVerified)||verification.total_dv_km_s<bestVerified.actual.total_dv_km_s, bestVerified=verifiedNode; end
  if verification.total_dv_km_s<c.notify_dv_km_s, stats.notification=true; end
 end
+if ~isempty(checkpoint)&&c.budget_s>c.checkpoint_s
+ vt=tic;
+ if strcmp(ctocscreen.v4.controlKey(checkpoint.q),ctocscreen.v4.controlKey(chosen.q))
+  checkpointReport=verification;
+ else
+  [checkpointReport,~]=ctocscreen.v4.replay(checkpoint.q,eph,c,true);
+  stats.independent_checks=stats.independent_checks+1;
+ end
+ stats.verification_seconds=stats.verification_seconds+toc(vt);
+ snapshot=struct('candidate',thin(checkpoint),'verification',checkpointReport, ...
+  'candidate_elapsed_s',checkpointElapsed,'limit_s',c.checkpoint_s,'verified_elapsed_s',toc(clock));
+ save(fullfile(folder,'budget_checkpoint.mat'),'snapshot');
+ record('budget_checkpoint',struct('limit_s',c.checkpoint_s,'candidate_elapsed_s',checkpointElapsed, ...
+  'visits',checkpointReport.visit_count,'dv',checkpointReport.total_dv_km_s,'passed',checkpointReport.passed));
+end
 stats.source_unchanged=isequaln(signature,ctocscreen.v4.signature());
 assert(stats.source_unchanged,'ctocscreen:v4:changedSource','Sources changed during this experiment.');
 record('final_verification',verification);
 result=struct('manifest',manifest,'stats',stats,'best',thin(chosen),'verification',verification, ...
  'best_complete',thin(bestComplete),'best_verified',thin(bestVerified),'feedback',memory, ...
- 'events',{events},'joint_reports',{joints},'recovery_states',{warm},'rng_state',stream.State);
+ 'events',{events},'joint_reports',{joints},'recovery_states',{warm},'rng_state',stream.State, ...
+ 'checkpoint_verification',checkpointReport,'checkpoint_candidate_elapsed_s',checkpointElapsed);
 result.stats.total_seconds=toc(clock);
 save(fullfile(folder,'result.mat'),'result','-v7.3');
 if ~isempty(bestVerified)
@@ -182,6 +200,9 @@ fprintf('V4 FINAL independent=%d/35 dv=%.12f passed=%d elapsed=%.3f folder=%s\n'
     ||(node.actual.visit_count==best.actual.visit_count&&node.actual.total_dv_km_s<best.actual.total_dv_km_s)
    best=node; record('best',struct('visits',node.actual.visit_count,'dv',node.actual.total_dv_km_s, ...
     'root_id',node.root_id,'origin',node.origin));
+   if c.checkpoint_s>0&&toc(clock)<=c.checkpoint_s
+    checkpoint=best; checkpointElapsed=toc(clock);
+   end
   end
   if ~node.actual.passed, return; end
   if isempty(bestComplete)||node.actual.total_dv_km_s<bestComplete.actual.total_dv_km_s, bestComplete=node; end

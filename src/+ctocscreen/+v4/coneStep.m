@@ -52,7 +52,9 @@ linear=max([0;Ai*w-bi;abs(Ae*w-be);lb-w;w-ub]); conic=0;
 for j=1:numel(soc)
  conic=max(conic,norm(soc(j).A*w-soc(j).b)-(soc(j).d.'*w-soc(j).gamma));
 end
-s.feasibility=max(linear,conic); s.ok=s.feasibility<max(1e-9,10*p.config.solver_tolerance);
+% A finite trial need not be an optimal cone solution. Exact merit and replay
+% decide acceptance; this numerical gate does not relax physical constraints.
+s.feasibility=max(linear,conic); s.ok=s.feasibility<p.config.subproblem_step_tolerance;
 s.linear_residual=linear; s.conic_residual=conic;
 s.d=w(1:n); s.slack=sum(w([ip im iv ig ie]));
 end
