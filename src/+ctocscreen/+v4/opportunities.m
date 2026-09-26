@@ -1,9 +1,11 @@
-function opp=opportunities(node,eph,c,ids)
+function opp=opportunities(node,eph,c,ids,arcs)
 %OPPORTUNITIES Retain multiple local windows, including different revolutions.
-if nargin<4, ids=find(node.actual.distance_km>1); end
+% arcs restricts the scan (default: all arcs of the trace).
+if nargin<4||isempty(ids), ids=find(node.actual.distance_km>1); end
+if nargin<5||isempty(arcs), arcs=1:numel(node.trace.arcs); end
 opp=struct('id',{},'time',{},'distance',{},'arc',{});
 if isempty(ids), return; end
-for a=1:numel(node.trace.arcs)
+for a=arcs(:).'
  sol=node.trace.arcs{a}; lo=sol.x(1); hi=sol.x(end);
  tt=linspace(lo,hi,max(3,ceil((hi-lo)/c.scan_step_s)+1)); xx=deval(sol,tt);
  rt=ctocscreen.v3QueryTargets(eph,ids,tt,'grid');

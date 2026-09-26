@@ -10,7 +10,7 @@ eph=ctocscreen.v3LoadTargetEphemeris(fullfile(sim,'runs/v3/preprocessing/targets
 c=ctocscreen.v4.defaults(); q=s.result.best.q;
 q.T=q.tau(21); q.tau=q.tau(1:20); q.u=q.u(1:20,:); q.witness(q.witness>q.T)=NaN;
 [pa,pt]=ctocscreen.v4.replay(q,eph,c); parent=struct('q',pt.q,'actual',pa,'trace',pt,'root_id',1, ...
- 'root_kind','diagnostic','seed_target',1,'seed_duration',3600,'attempts',0,'zero_gain',0,'generation',0,'origin','diagnostic');
+ 'root_kind','diagnostic','seed_target',1,'seed_duration',3600,'attempts',0,'zero_gain',0,'generation',0,'origin','diagnostic','heuristic_H',NaN);
 parent.q.witness=pa.witness_times_s;
 cases={'coast','delayed_impulse'}; reuse=zeros(2,3);
 for k=1:2
@@ -51,7 +51,7 @@ sq=struct('x0',ctocscreen.initialState(old.initial_q,seph.model.mu,seph.model.re
  'tau',[90;360],'u',[.05 -.001 .0005;-.0004 .0003 .0002],'T',600,'witness',nan(35,1));
 [sa,st]=ctocscreen.v4.replay(sq,seph,sc);
 node=struct('q',st.q,'actual',sa,'trace',st,'root_id',1,'root_kind','synthetic', ...
- 'seed_target',1,'seed_duration',100,'attempts',0,'zero_gain',0,'generation',0,'origin','synthetic');
+ 'seed_target',1,'seed_duration',100,'attempts',0,'zero_gain',0,'generation',0,'origin','synthetic','heuristic_H',NaN);
 node.q.witness=sa.witness_times_s; tabu=[]; scopes={}; firstIds=[];
 for k=1:3
  [~,jr,~,tabu]=ctocscreen.v4.shared(node,seph,sc,[5 5 5],tabu);

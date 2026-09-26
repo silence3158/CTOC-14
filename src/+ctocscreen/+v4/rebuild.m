@@ -15,7 +15,7 @@ if ~a.initial_passed||~a.height_passed||strcmp(a.status,'propagation_failure')
 end
 child=parent; child.q=tr.q; child.q.witness=a.witness_times_s; child.actual=a; child.trace=tr;
 child.origin='suffix_rebuild'; child.root_kind='reconstructed_current_run';
-child.attempts=0; child.zero_gain=0; child.generation=parent.generation+1;
+child.attempts=0; child.zero_gain=0; child.generation=parent.generation+1; child.heuristic_H=NaN;
 report.status='actual_prefix'; report.cut_time_s=cut; report.retained_visits=a.visit_count;
 report.revoked_target_ids=find(parent.actual.distance_km<=1&a.distance_km>1).';
 report.seconds=toc(clock);

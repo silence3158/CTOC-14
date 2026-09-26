@@ -6,7 +6,10 @@ function [child,report,warm,tabu]=shared(parent,eph,c,seconds,tabu)
 % not a proof that the encounter combination is infeasible.
 if nargin<5||isempty(tabu), tabu=struct('keys',{{}},'failures',[]); end
 child=[]; warm=[]; report=struct('status','no_opportunity','seconds',0,'iterations',0,'skipped_tasks',0);
-clock=tic; opp=ctocscreen.v4.opportunities(parent,eph,c);
+clock=tic;
+% Only the last arc: its encounters have no passive suffix, so opening the
+% last burn gives as many free variables as new requirements (A3 design).
+opp=ctocscreen.v4.opportunities(parent,eph,c,[],numel(parent.trace.arcs));
 if isempty(opp), report.seconds=toc(clock); return; end
 active=find(parent.actual.distance_km<=1); theta=parent.actual.witness_times_s(active);
 levels={'local','expanded','full'}; chosen=[];
@@ -40,7 +43,7 @@ if report.iterations>0
  if isempty(index), tabu.keys{end+1}=key; tabu.failures(end+1)=min(c.shared_attempts,increment);
  else, tabu.failures(index)=min(c.shared_attempts,tabu.failures(index)+increment); end
 end
-if ~isempty(child), child.origin='shared_arc'; child.attempts=0; child.generation=parent.generation+1; end
+if ~isempty(child), child.origin='shared_arc'; child.attempts=0; child.generation=parent.generation+1; child.heuristic_H=NaN; end
 end
 function key=taskKey(q,selected)
 % Controls after the encounter do not define the insertion task.

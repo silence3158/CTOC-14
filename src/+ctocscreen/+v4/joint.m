@@ -108,6 +108,8 @@ try
   report.final_J=best.actual.total_dv_km_s;
   report.active_passed=acceptable(best.actual,ids,c);
   report.control_changed=~strcmp(ctocscreen.v4.controlKey(best.q),ctocscreen.v4.controlKey(candidate.q));
+  % A changed trajectory needs its own remaining-cost estimate.
+  if report.control_changed&&isfield(best,'heuristic_H'), best.heuristic_H=NaN; end
  end
  warm=struct('z',z,'task_ids',ids,'theta',theta,'scope',scope,'focus',focus,'trust',trust,'penalty',lambda, ...
   'physical_key',ctocscreen.v4.controlKey(candidate.q),'kind','restoration_iterate', ...

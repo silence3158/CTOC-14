@@ -42,5 +42,5 @@ end
 if toc(clock)>=budget, report.status='budget_not_started'; report.seconds=toc(clock); return; end
 [child,report,warm]=ctocscreen.v4.joint(seed,ids,theta,'full',focus,eph,c,budget-toc(clock));
 report.action=name; report.seconds=toc(clock);
-if ~isempty(child), child.origin=name; child.attempts=0; child.generation=parent.generation+1; end
+if ~isempty(child), child.origin=name; child.attempts=0; child.generation=parent.generation+1; child.heuristic_H=NaN; end
 end

@@ -1,5 +1,11 @@
-function beam=selectBeam(nodes,c)
-%SELECTBEAM Keep actual states, coverage combinations, and root representatives.
+function [beam,estimates]=selectBeam(nodes,c,eph)
+%SELECTBEAM Layered beam: compare candidates only within equal visit counts.
+% Rank within a layer by f = J + H + P (km/s): J raw spent Delta-V, H the
+% crossing-event estimate of remaining cost (heuristic, not a bound), P a
+% time-overrun penalty. Layers after Beam P-ACO depth levels. Within a layer
+% the plane normal and orbit shape keep representatives apart.
+if nargin<3, eph=[]; end
+estimates=0;
 valid={}; keys={};
 for k=1:numel(nodes)
  n=nodes{k}; a=n.actual;
@@ -13,24 +19,54 @@ for k=1:numel(nodes)
  end
 end
 beam={}; if isempty(valid), return; end
-count=cellfun(@(n)n.actual.visit_count,valid); cost=cellfun(@(n)n.actual.total_dv_km_s,valid);
-[~,order]=sortrows([-count(:),cost(:)]); selected=order(1); root=cellfun(@(n)n.root_id,valid);
-for k=order(:).'
- if numel(selected)>=min(c.beam_width,ceil(c.beam_width/2)), break; end
- if ~ismember(root(k),root(selected)), selected(end+1)=k; end %#ok<AGROW>
-end
-F=zeros(numel(valid),43);
 for k=1:numel(valid)
- n=valid{k}; x=n.actual.final_state;
- F(k,:)=[n.q.T/43200,x(1:3).'/10000,x(4:6).'/0.5,2*(n.actual.distance_km<=1).',n.root_id/4];
-end
-while numel(selected)<min(c.beam_width,numel(valid))
- remaining=setdiff(1:numel(valid),selected,'stable'); score=zeros(numel(remaining),1);
- for j=1:numel(remaining)
-  k=remaining(j); diversity=min(vecnorm(F(selected,:)-F(k,:),2,2));
-  score(j)=count(k)-.05*cost(k)+.4*min(10,diversity);
+ if ~isfield(valid{k},'heuristic_H')||isnan(valid{k}.heuristic_H)
+  valid{k}.heuristic_H=NaN;
+  if ~isempty(eph)
+   [~,info]=ctocscreen.v4.events(valid{k},eph,c); valid{k}.heuristic_H=info.H; estimates=estimates+1;
+  end
  end
- [~,j]=max(score); selected(end+1)=remaining(j); %#ok<AGROW>
+end
+count=cellfun(@(n)n.actual.visit_count,valid); f=cellfun(@(n)merit(n,c),valid);
+layers=unique(count);
+% Deepest layers first; every nonempty layer keeps at least one representative.
+quota=zeros(size(layers)); total=min(c.beam_width,numel(valid));
+order=numel(layers):-1:1;
+for k=order, if sum(quota)<total, quota(k)=1; end, end
+while sum(quota)<total
+ grown=false;
+ for k=order
+  if sum(quota)>=total, break; end
+  if quota(k)<sum(count==layers(k)), quota(k)=quota(k)+1; grown=true; end
+ end
+ if ~grown, break; end
+end
+F=zeros(numel(valid),9);
+for k=1:numel(valid)
+ x=valid{k}.actual.final_state; h=cross(x(1:3),x(4:6)); h=h/max(norm(h),eps);
+ R=norm(x(1:3)); en=dot(x(4:6),x(4:6))/2-398600.4415/R;
+ F(k,:)=[h.',R/10000,en/5,valid{k}.q.T/86400,x(4:6).'/2];
+end
+selected=[];
+for k=order
+ members=find(count==layers(k)); if quota(k)==0, continue; end
+ [~,rank]=sort(f(members)); pick=members(rank(1));
+ while numel(pick)<quota(k)
+  rest=setdiff(members,pick,'stable');
+  if isempty(rest), break; end
+  d=zeros(numel(rest),1);
+  for j=1:numel(rest), d(j)=min(vecnorm(F(pick,:)-F(rest(j),:),2,2)); end
+  % Prefer low merit, but reward distinct end geometry within the layer.
+  score=reshape(f(rest),[],1)-c.layer_diversity*min(1,d);
+  [~,j]=min(score); pick(end+1)=rest(j); %#ok<AGROW>
+ end
+ selected=[selected,pick]; %#ok<AGROW>
 end
 beam=valid(selected);
+end
+function f=merit(n,c)
+J=n.actual.total_dv_km_s; H=n.heuristic_H; if isnan(H), H=0; end
+k=n.actual.visit_count; used=n.q.T/864000;
+over=max(0,used-(k/35+c.time_slack));
+f=J+H+c.time_weight*over*35;
 end

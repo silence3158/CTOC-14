@@ -1,78 +1,33 @@
 function [children,report,memory]=expand(parent,eph,c,stream,memory,budget)
-%EXPAND Coasts and delayed impulse proposals from the current real trajectory.
-clock=tic; children={}; m=eph.model; q=parent.q; t0=q.T; x=parent.actual.final_state;
+%EXPAND Children of the current real trajectory (A layer).
+% Main source: timed Lambert transfers to target plane-crossing events
+% (events.m, crossing.m). Old any-time grid proposals keep a minority share
+% for diversity. All children are J2-corrected and replayed with fixed controls.
+clock=tic; children={}; m=eph.model; q=parent.q; t0=q.T;
 remaining=find(parent.actual.distance_km>1); report=struct('enumerated',0,'guided',0, ...
- 'children',0,'seconds',0,'coast_children',0,'failed_guidance',0,'errors',{{}});
+ 'children',0,'seconds',0,'coast_children',0,'failed_guidance',0,'errors',{{}}, ...
+ 'crossing_events',0,'crossing_proposals',0,'grid_proposals',0,'heuristic_H',NaN,'crossing_children',0);
 if isempty(remaining)||t0>=m.horizon_s, return; end
-available=m.horizon_s-t0;
-look=min([available,c.lookahead_s,3*available/max(1,numel(remaining))]);
-if look<=1, return; end
-% Natural continuation is a first-class child, even without a new visit.
-if parent.zero_gain<c.max_zero_gain
- coast=q; coast.T=t0+look;
- [a,tr]=ctocscreen.v4.replay(coast,eph,c,false,parent);
- if a.initial_passed&&a.height_passed&&~strcmp(a.status,'propagation_failure')
-  node=makeChild(parent,coast,a,tr,'coast'); children{end+1}=node; report.coast_children=1;
- end
-end
-if toc(clock)>=budget, report.seconds=toc(clock); report.children=numel(children); return; end
-dt=unique([max(600,look*[.06 .12 .25 .45 .7 1]),min(look,parent.seed_duration)]);
-dt=dt(dt>0&dt<=available); if numel(dt)>c.time_samples, dt=dt(round(linspace(1,numel(dt),c.time_samples))); end
-% Actual target geometry only; keep exploration targets outside the nearest group.
-h=cross(x(1:3),x(4:6)); h=h/max(norm(h),eps);
-[rr,~]=ctocscreen.v3QueryTargets(eph,remaining,t0+min(look,median(dt)));
-rankCost=abs(rr*h)+.05*abs(vecnorm(rr,2,2)-norm(x(1:3)));
-[~,rank]=sort(rankCost); chosen=remaining(rank(1:min(c.target_count,numel(rank))));
-if numel(remaining)>numel(chosen), chosen(end)=remaining(randi(stream,numel(remaining))); end
-if t0==0&&~ismember(parent.seed_target,chosen), chosen(1)=parent.seed_target; end
-chosen=unique(chosen,'stable');
-pairs=zeros(numel(chosen)*numel(dt),2); at=0;
-for it=1:numel(dt)
- for j=1:numel(chosen), at=at+1; pairs(at,:)=[j it]; end
-end
-pairs=pairs(randperm(stream,size(pairs,1)),:);
-seeds=struct('target',{},'arrival',{},'departure',{},'x',{},'v',{},'score',{});
-% The enumeration share is measured from its own start: a slow coast replay must
-% not consume the whole window, and at least one proposal is always attempted.
-enumerationEnd=toc(clock)+max(.2,.45*(budget-toc(clock)));
-for index=1:size(pairs,1)
- if index>1&&toc(clock)>=enumerationEnd, break; end
- id=chosen(pairs(index,1)); duration=dt(pairs(index,2)); wait=0;
- if mod(index,4)==0, wait=min(duration*.25,3600); end
- if wait>0
-  % Reintegrate from the last real impulse; a temporary coast endpoint is not a control event.
-  if isempty(q.tau), anchor=0; xa=q.x0;
-  else, anchor=q.tau(end); xa=ctocscreen.v4.stateAt(parent.trace,anchor,'post'); end
-  xp=ctocscreen.v3Arc(xa,anchor,t0+wait,m,c,false,true);
- else, xp=x; end
- rt=ctocscreen.v3QueryTargets(eph,id,t0+duration);
- policy=struct('max_revolutions',c.max_revolutions,'endpoint_tol_km',.005);
- try
-  branches=ctocscreen.v3LambertBranches(xp(1:3),rt,duration-wait,m.mu,policy);
-  for b=1:numel(branches)
-   dv=branches(b).v_depart(:)-xp(4:6);
-   h1=cross(xp(1:3),xp(4:6)); h2=cross(xp(1:3),branches(b).v_depart(:));
-   inc=abs(acosd(max(-1,min(1,h1(3)/norm(h1))))-acosd(max(-1,min(1,h2(3)/norm(h2)))));
-   penalty=(max(0,inc-c.plane_threshold_deg)/c.plane_threshold_deg)^2;
-   score=norm(dv)+c.plane_weight*min(4,penalty);
-   seeds(end+1)=struct('target',id,'arrival',t0+duration,'departure',t0+wait, ...
-    'x',xp,'v',branches(b).v_depart(:),'score',score); %#ok<AGROW>
-  end
-  report.enumerated=report.enumerated+1;
- catch err
-  report.errors{end+1}=err.identifier;
- end
+[ev,info]=ctocscreen.v4.events(parent,eph,c);
+report.crossing_events=numel(ev); report.heuristic_H=info.H;
+seeds=ctocscreen.v4.crossing(parent,eph,c,ev,info,stream,.4*budget);
+report.crossing_proposals=numel(seeds);
+if rand(stream)<c.grid_share&&toc(clock)<.6*budget
+ grid=gridSeeds(parent,eph,c,stream,remaining,.6*budget-toc(clock));
+ report.grid_proposals=numel(grid); report.enumerated=numel(grid);
+ seeds=[seeds,grid];
 end
 if ~isempty(seeds)
- [~,order]=sort([seeds.score]);
- % Preserve the cheapest proposal and sample an alternative from distinct windows.
- if numel(order)>2&&rand(stream)<c.exploration
-  pick=randi(stream,[2 min(numel(order),10)]); order([2 pick])=order([pick 2]);
- end
- used=[];
- for k=order
-  if toc(clock)>=budget||report.guided>=c.branch_count, break; end
-  seed=seeds(k); signature=[seed.target,seed.arrival];
+ % Sampling after spec eq. (30) with neutral pheromone: weight ~ eta^beta,
+ % eta = 1/score, plus a uniform epsilon share (exploration).
+ score=[seeds.score]; w=(1./max(score,1e-3)).^c.heuristic_beta; w=w/sum(w);
+ prob=(1-c.exploration)*w+c.exploration/numel(w);
+ used=[]; tries=0;
+ while report.guided<c.branch_count&&tries<4*c.branch_count&&toc(clock)<budget&&any(prob>0)
+  tries=tries+1;
+  % The cheapest proposal is always tried first; later picks are sampled.
+  if report.guided==0, [~,k]=min(score); else, k=find(rand(stream)<=cumsum(prob)/sum(prob),1); end
+  prob(k)=0; seed=seeds(k); signature=[seed.target,round(seed.arrival)];
   if ~isempty(used)&&ismember(signature,used,'rows'), continue; end
   used(end+1,:)=signature; %#ok<AGROW>
   report.guided=report.guided+1;
@@ -87,20 +42,66 @@ if ~isempty(seeds)
    child.witness(seed.target)=seed.arrival;
    [a,tr]=ctocscreen.v4.replay(child,eph,c,false,parent);
    if a.initial_passed&&a.height_passed&&~strcmp(a.status,'propagation_failure')
-    node=makeChild(parent,child,a,tr,'delayed_impulse');
+    origin='delayed_impulse'; if strcmp(seed.kind,'crossing'), origin='crossing_transfer'; end
+    node=makeChild(parent,child,a,tr,origin);
     [memory,~]=ctocscreen.v4.feedback(memory,'observe',node,c);
-    children{end+1}=node;
+    children{end+1}=node; %#ok<AGROW>
+    if strcmp(seed.kind,'crossing'), report.crossing_children=report.crossing_children+1; end
    end
   catch err
    report.failed_guidance=report.failed_guidance+1; report.errors{end+1}=err.identifier;
   end
  end
 end
+% A natural continuation stays available, but only when no transfer child exists:
+% waiting is already represented by delayed departures along the coast.
+if isempty(children)&&parent.zero_gain<c.max_zero_gain&&toc(clock)<budget
+ look=min([m.horizon_s-t0,c.lookahead_s]);
+ if look>1
+  coast=q; coast.T=t0+look;
+  [a,tr]=ctocscreen.v4.replay(coast,eph,c,false,parent);
+  if a.initial_passed&&a.height_passed&&~strcmp(a.status,'propagation_failure')
+   children{end+1}=makeChild(parent,coast,a,tr,'coast'); report.coast_children=1;
+  end
+ end
+end
 report.children=numel(children); report.seconds=toc(clock);
+end
+function seeds=gridSeeds(parent,eph,c,stream,remaining,budget)
+% Pre-2026-09-26 any-time target/duration grid, kept as a diversity source.
+clock=tic; m=eph.model; q=parent.q; t0=q.T; x=parent.actual.final_state;
+seeds=struct('target',{},'departure',{},'arrival',{},'x',{},'v',{},'dv',{},'score',{},'kind',{});
+available=m.horizon_s-t0;
+look=min([available,c.lookahead_s,3*available/max(1,numel(remaining))]);
+if look<=1, return; end
+dt=unique([max(600,look*[.06 .12 .25 .45 .7 1]),min(look,parent.seed_duration)]);
+dt=dt(dt>0&dt<=available); if numel(dt)>c.time_samples, dt=dt(round(linspace(1,numel(dt),c.time_samples))); end
+h=cross(x(1:3),x(4:6)); h=h/max(norm(h),eps);
+rr=ctocscreen.v3QueryTargets(eph,remaining,t0+min(look,median(dt)));
+[~,rank]=sort(abs(rr*h)+.05*abs(vecnorm(rr,2,2)-norm(x(1:3))));
+chosen=remaining(rank(1:min(c.target_count,numel(rank))));
+if numel(remaining)>numel(chosen), chosen(end)=remaining(randi(stream,numel(remaining))); end
+if t0==0&&~ismember(parent.seed_target,chosen), chosen(1)=parent.seed_target; end
+chosen=unique(chosen,'stable');
+policy=struct('max_revolutions',c.max_revolutions,'endpoint_tol_km',.005);
+for id=chosen(:).'
+ for d=dt
+  if toc(clock)>=budget, return; end
+  rt=ctocscreen.v3QueryTargets(eph,id,t0+d);
+  try, b=ctocscreen.v3LambertBranches(x(1:3),rt,d,m.mu,policy); catch, continue; end
+  for j=1:numel(b)
+   v=b(j).v_depart(:); h1=cross(x(1:3),x(4:6)); h2=cross(x(1:3),v);
+   inc=abs(acosd(max(-1,min(1,h1(3)/norm(h1))))-acosd(max(-1,min(1,h2(3)/norm(h2)))));
+   penalty=(max(0,inc-c.plane_threshold_deg)/c.plane_threshold_deg)^2; dv=norm(v-x(4:6));
+   seeds(end+1)=struct('target',id,'departure',t0,'arrival',t0+d,'x',x,'v',v, ...
+    'dv',dv,'score',dv+c.plane_weight*min(4,penalty),'kind','grid'); %#ok<AGROW>
+  end
+ end
+end
 end
 function child=makeChild(parent,q,a,tr,origin)
 child=parent; child.q=tr.q; child.q.witness=a.witness_times_s;
 child.actual=a; child.trace=tr; child.origin=origin; child.generation=parent.generation+1;
-child.attempts=0; child.zero_gain=0;
+child.attempts=0; child.zero_gain=0; child.heuristic_H=NaN;
 if a.visit_count<=parent.actual.visit_count, child.zero_gain=parent.zero_gain+1; end
 end

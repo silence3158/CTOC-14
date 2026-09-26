@@ -7,7 +7,7 @@ q=struct('x0',ctocscreen.initialState(old.initial_q,eph.model.mu,eph.model.re).'
  'tau',[90;360],'u',[.002 -.001 .0005;-.0004 .0003 .0002],'T',600,'witness',nan(35,1));
 [a,tr]=ctocscreen.v4.replay(q,eph,c); assert(~strcmp(a.status,'propagation_failure'),a.failure_reason);
 node=struct('q',q,'actual',a,'trace',tr,'root_id',1,'root_kind','synthetic', ...
- 'seed_target',1,'seed_duration',100,'attempts',0,'zero_gain',0,'generation',0,'origin','synthetic');
+ 'seed_target',1,'seed_duration',100,'attempts',0,'zero_gain',0,'generation',0,'origin','synthetic','heuristic_H',NaN);
 ids=[8;24]; theta=[160;420]; p=ctocscreen.v4.problem(node,ids,theta,'full',300,eph,c);
 z=p.z0; e=ctocscreen.v4.evaluate(p,z,true);
 assert(e.max_position_defect<1e-5,'Initial nodes must follow fixed controls.');

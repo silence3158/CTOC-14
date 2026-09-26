@@ -14,7 +14,7 @@ nextRoot=1; rootServices=zeros(1,16); stats=struct('rounds',0,'root_count',0,'ex
  'shared_calls',0,'full_calls',0,'structure_calls',0,'resume_calls',0,'joint_iterations',0, ...
  'actual_joint_improvements',0,'suffix_rebuilds',0,'independent_checks',0,'complete_found',0, ...
  'first_complete_s',NaN,'first_complete_dv_km_s',NaN,'notification',false, ...
- 'expansion_seconds',0,'joint_seconds',0,'verification_seconds',0,'source_unchanged',false);
+ 'expansion_seconds',0,'joint_seconds',0,'estimate_calls',0,'estimate_seconds',0,'verification_seconds',0,'source_unchanged',false);
 try
 for k=1:c.root_count
  node=ctocscreen.v4.root(nextRoot,eph,c,stream); nextRoot=nextRoot+1;
@@ -29,10 +29,11 @@ while toc(clock)<deadline
   beam{end+1}=node; stats.root_count=stats.root_count+1; parentIndex=numel(beam);
  else
   visits=cellfun(@(n)n.actual.visit_count,beam); attempts=cellfun(@(n)n.attempts,beam);
-  costs=cellfun(@(n)n.actual.total_dv_km_s,beam);
+  % Estimated mission cost J+H (km/s) trades against depth; H is heuristic.
+  costs=cellfun(@(n)n.actual.total_dv_km_s+estimateOf(n),beam);
   weights=ones(size(beam));
   for k=1:numel(beam), [memory,weights(k)]=ctocscreen.v4.feedback(memory,'query',beam{k},c); end
-  score=visits-.8*attempts-.03*costs+log(weights);
+  score=visits-.8*attempts-c.parent_cost_weight*costs+log(weights);
   [~,parentIndex]=max(score);
   if rand(stream)<c.exploration
    probabilities=exp(score-max(score)); probabilities=probabilities/sum(probabilities);
@@ -88,7 +89,7 @@ while toc(clock)<deadline
    [child,jr,wr]=ctocscreen.v4.joint(seed,ids,seed.actual.witness_times_s(ids),'full',seed.q.T,eph,c, ...
     min(c.scope_seconds(3),deadline-toc(clock)),continuation);
    stats.full_calls=stats.full_calls+1; addJoint(jr,wr);
-   if ~isempty(child), child.origin='full_history'; children{end+1}=child; consider(child); end
+   if ~isempty(child), child.origin='full_history'; child.heuristic_H=NaN; children{end+1}=child; consider(child); end
   end
  end
  if mod(iteration,c.structure_every)==0&&toc(clock)<deadline
@@ -122,7 +123,8 @@ while toc(clock)<deadline
    children{j}.attempts=children{j}.attempts+1;
   end
  end
- beam=ctocscreen.v4.selectBeam([beam,children],c);
+ et=tic; [beam,estimated]=ctocscreen.v4.selectBeam([beam,children],c,eph);
+ stats.estimate_calls=stats.estimate_calls+estimated; stats.estimate_seconds=stats.estimate_seconds+toc(et);
  [memory,~]=ctocscreen.v4.feedback(memory,'evaporate',[],c);
  if mod(iteration,c.log_every)==0
   fprintf('V4 round=%d elapsed=%.1f best=%d/35 dv=%.9f beam=%d B=%d/%d/%d\n', ...
@@ -208,6 +210,9 @@ end
    stats.actual_joint_improvements=stats.actual_joint_improvements+1;
   end
   record('joint',jr);
+ end
+ function value=estimateOf(n)
+  value=0; if isfield(n,'heuristic_H')&&~isnan(n.heuristic_H), value=n.heuristic_H; end
  end
  function value=rootServicesAt(id)
   value=0; if id<=numel(rootServices), value=rootServices(id); end
