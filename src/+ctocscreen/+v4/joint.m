@@ -7,7 +7,7 @@ report=struct('scope',scope,'status','not_started','iterations',0,'accepted_step
  'solver_exitflags',[],'rebase_count',0,'initial_V',NaN,'final_V',NaN, ...
  'initial_J',candidate.actual.total_dv_km_s,'final_J',NaN,'opened_initial',false, ...
  'opened_burns',[],'control_changed',false,'active_passed',false,'resumed',false, ...
- 'step_diagnostics',{{}},'failure_id','','failure_reason','');
+ 'step_diagnostics',{{}},'last_replay_status','','last_replay_failure_id','','failure_id','','failure_reason','');
 try
  p=ctocscreen.v4.problem(candidate,ids,theta,scope,focus,eph,c); z=p.z0;
  report.opened_initial=all(p.free(p.ix(:,1))); report.opened_burns=p.opened_burns;
@@ -68,6 +68,7 @@ try
    if te.near_feasible||mod(report.accepted_steps,3)==0
     rt=tic; q=ctocscreen.v4.decode(p,z); [a,tr]=ctocscreen.v4.replay(q,eph,c);
     report.replay_seconds=report.replay_seconds+toc(rt);
+    report.last_replay_status=a.status; report.last_replay_failure_id=a.failure_id;
     trialCandidate=candidate; trialCandidate.q=q; trialCandidate.actual=a; trialCandidate.trace=tr;
     lastEvaluated=trialCandidate;
     lastReplayZ=z;
@@ -93,11 +94,14 @@ try
  if isempty(lastEvaluated)||~isequal(z,lastReplayZ)
   rt=tic; q=ctocscreen.v4.decode(p,z); [a,tr]=ctocscreen.v4.replay(q,eph,c);
   report.replay_seconds=report.replay_seconds+toc(rt);
+  report.last_replay_status=a.status; report.last_replay_failure_id=a.failure_id;
   trialCandidate=candidate; trialCandidate.q=q; trialCandidate.actual=a; trialCandidate.trace=tr;
   lastEvaluated=trialCandidate;
   if acceptable(a,ids,c)&&(isempty(best)||a.total_dv_km_s<best.actual.total_dv_km_s-1e-9), best=trialCandidate; end
  end
- if isempty(best)&&~isempty(lastEvaluated), best=lastEvaluated; end
+ if isempty(best)&&~isempty(lastEvaluated)&&~strcmp(lastEvaluated.actual.status,'propagation_failure')
+  best=lastEvaluated;
+ end
  if ~isempty(best)
   best.q=ctocscreen.v4.canonical(best.q,eph.model); best.q.witness=best.actual.witness_times_s;
   report.final_J=best.actual.total_dv_km_s;

@@ -15,6 +15,7 @@ nextRoot=1; rootServices=zeros(1,16); stats=struct('rounds',0,'root_count',0,'ex
  'actual_joint_improvements',0,'suffix_rebuilds',0,'independent_checks',0,'complete_found',0, ...
  'first_complete_s',NaN,'first_complete_dv_km_s',NaN,'notification',false, ...
  'expansion_seconds',0,'joint_seconds',0,'verification_seconds',0,'source_unchanged',false);
+try
 for k=1:c.root_count
  node=ctocscreen.v4.root(nextRoot,eph,c,stream); nextRoot=nextRoot+1;
  beam{end+1}=node; stats.root_count=stats.root_count+1;
@@ -102,6 +103,8 @@ while toc(clock)<deadline
     children{end+1}=child; consider(child);
    end
  end
+ children=children(cellfun(@(n)~strcmp(n.actual.status,'propagation_failure') ...
+  &&n.actual.initial_passed&&n.actual.height_passed&&isfinite(n.actual.total_dv_km_s),children));
  % Feedback affects competing physical children, with a nonzero exploration floor.
  for j=1:numel(children)
   [memory,weight]=ctocscreen.v4.feedback(memory,'query',children{j},c);
@@ -170,6 +173,12 @@ ctocscreen.v4.writeReport(folder,result,vtrace,eph);
 result.stats.total_seconds=toc(clock); save(fullfile(folder,'result.mat'),'result','-v7.3');
 fprintf('V4 FINAL independent=%d/35 dv=%.12f passed=%d elapsed=%.3f folder=%s\n', ...
  verification.visit_count,verification.total_dv_km_s,verification.passed,result.stats.total_seconds,folder);
+catch err
+ interrupted=struct('status','runtime_interrupted','failure_id',err.identifier,'failure_reason',err.message, ...
+  'elapsed_s',toc(clock),'best',thin(best),'best_verified',thin(bestVerified),'manifest',manifest,'stats',stats);
+ save(fullfile(folder,'interrupted.mat'),'interrupted','-v7.3');
+ rethrow(err);
+end
  function record(event,payload)
   row=struct('event',event,'elapsed_s',toc(clock),'payload',payload);
   events{end+1}=row; fprintf(fid,'%s\n',jsonencode(row));

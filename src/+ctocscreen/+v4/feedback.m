@@ -6,6 +6,8 @@ if isempty(memory)
 end
 weight=1; details=struct('key','','loss',0);
 if strcmp(operation,'evaporate'), memory.negative=(1-c.evaporation)*memory.negative; return; end
+% Failed integration has no complete physical action history to learn from.
+if strcmp(node.actual.status,'propagation_failure')||~isfinite(node.actual.total_dv_km_s), return; end
 keys=features(node);
 if strcmp(operation,'query')
  memory.queries=memory.queries+numel(keys); values=ones(numel(keys),1);
@@ -23,7 +25,6 @@ physical=ctocscreen.v4.controlKey(node.q);
 seen=any(strcmp(memory.observed,physical));
 eligible=node.actual.independent&&node.actual.passed&&node.actual.total_dv_km_s<=c.search_max_dv_km_s;
 if seen&&(~eligible||any(strcmp(memory.positive_observed,physical))), return; end
-if strcmp(node.actual.status,'propagation_failure')||~isfinite(node.actual.total_dv_km_s), return; end
 if ~seen, memory.observed{end+1}=physical; end
 J=node.actual.total_dv_km_s; costs=vecnorm(node.q.u,2,2);
 loss=max(0,J/c.search_max_dv_km_s-1)*costs/max(J,eps);
