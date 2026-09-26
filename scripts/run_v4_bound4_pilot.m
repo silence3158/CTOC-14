@@ -1,11 +1,13 @@
-function report=run_v4_bound4_pilot(label)
+function report=run_v4_bound4_pilot(label,budget)
 %RUN_V4_BOUND4_PILOT Cold, cost-bounded partial-coverage diagnostic (no rollout).
 % Existing A-layer expansion; each physical node expanded once. Cached sibling
 % queues and deferred paths support four-impulse backtracking without replaying
 % previously tried edges. This is finite sampling, not complete beam-stack.
 if nargin<1, label=char(datetime('now','Format','yyyyMMdd_HHmmss')); end
+if nargin<2, budget=180; end
+validateattributes(budget,{'double'},{'scalar','finite','>=',180});
 sim=fileparts(fileparts(mfilename('fullpath'))); addpath(fullfile(sim,'src'));
-clock=tic; budget=180; reserve=18; depth=4; seed=888;
+clock=tic; reserve=18; depth=4; seed=888;
 folder=fullfile(sim,'runs/v4/development',['bound4_' label]);
 assert(~isfolder(folder),'Use a new output label.'); mkdir(folder);
 c=ctocscreen.v4.defaults(struct('seed',seed,'budget_s',budget));
@@ -15,6 +17,7 @@ stream=RandStream('mt19937ar','Seed',seed); memory=[];
 manifest=struct('cold_start',true,'history_inputs',{{}},'initial_candidates',0,'resume_file','', ...
  'config',c,'signature',signature,'target_signature',eph.signature,'matlab',version, ...
  'total_budget_s',budget,'verification_reserve_s',reserve,'backtrack_burns',depth, ...
+ 'checkpoint_limit_s',180,'checkpoint_enabled',budget>180, ...
  'rollout',false,'joint_B',false,'absorb',false,'initial_root_count',4, ...
  'started_utc',char(datetime('now','TimeZone','UTC','Format','yyyy-MM-dd HH:mm:ss')));
 save(fullfile(folder,'manifest.mat'),'manifest');
@@ -23,11 +26,33 @@ seen=containers.Map('KeyType','char','ValueType','logical');
 edgeTaken=false(1,0); events={}; roots={}; bestIds=[]; improvements=[];
 stats=struct('expanded',0,'generated',0,'over_cost',0,'duplicate_children',0, ...
  'guidance_failures',0,'backtracks',0,'four_burn_backtracks',0,'short_backtracks',0, ...
- 'deferred_resumes',0,'roots',0,'unique_edges',0,'expansion_seconds',0);
+ 'deferred_resumes',0,'roots',0,'unique_edges',0,'expansion_seconds',0, ...
+ 'checkpoint_verification_seconds',0);
 fid=fopen(fullfile(folder,'events.jsonl'),'w','n','UTF-8'); assert(fid>0);
 cleanup=onCleanup(@()fclose(fid));
 tick=0; deadline=budget-reserve;
+checkpoint=[];
 while toc(clock)<deadline-0.1
+ if budget>180&&isempty(checkpoint)&&toc(clock)>=180-reserve-0.1
+  checkpointStart=toc(clock);
+  [checkpointChecks,checkpointWinner]=verifyBest(180);
+  stats.checkpoint_verification_seconds=toc(clock)-checkpointStart;
+  snapshot=nodes{bestIds(1)}.node; snapshot=rmfield(snapshot,'trace');
+  rootExpanded=zeros(stats.roots,1);
+  for ix=1:numel(nodes)
+   item=nodes{ix}; rootExpanded(item.node.root_id)=rootExpanded(item.node.root_id)+item.expanded;
+  end
+  checkpoint=struct('limit_s',180,'search_end_s',checkpointStart,'finished_s',toc(clock), ...
+   'within_budget',toc(clock)<=180,'checked',{checkpointChecks},'best',checkpointWinner, ...
+   'screened',snapshot,'stats',stats,'expanded_by_root',rootExpanded,'rng_state',stream.State);
+  save(fullfile(folder,'checkpoint_180.mat'),'checkpoint');
+  if ~isempty(checkpointWinner)
+   fprintf('CHECKPOINT 180 independent=%d/35 J=%.12f finished=%.3fs\n', ...
+    checkpointWinner.verification.visit_count,checkpointWinner.verification.total_dv_km_s,checkpoint.finished_s);
+  end
+  record('checkpoint',struct('limit_s',180,'finished_s',checkpoint.finished_s,'within_budget',checkpoint.within_budget));
+  continue
+ end
  tick=tick+1; slot=1+mod(tick-1,4);
  if isempty(slots(slot).path)
   stats.roots=stats.roots+1;
@@ -40,7 +65,9 @@ while toc(clock)<deadline-0.1
  path=slots(slot).path; id=path(end); rec=nodes{id};
  if ~rec.expanded
   assert(rec.node.actual.total_dv_km_s<=c.search_max_dv_km_s,'Over-bound expansion.');
-  available=deadline-toc(clock); if available<.1, break; end
+  phaseDeadline=deadline;
+  if budget>180&&isempty(checkpoint), phaseDeadline=min(phaseDeadline,180-reserve); end
+  available=phaseDeadline-toc(clock); if available<.1, continue; end
   bt=tic;
   [kids,er,memory]=ctocscreen.v4.expand(rec.node,eph,c,stream,memory,min(c.action_seconds,available));
   stats.expansion_seconds=stats.expansion_seconds+toc(bt);
@@ -82,24 +109,13 @@ while toc(clock)<deadline-0.1
  end
 end
 stats.search_end_s=toc(clock);
-% Independent check of the best screened prefix, with fallback only if needed.
-checked={}; winner=[];
-for j=1:numel(bestIds)
- if toc(clock)>=budget-1, break; end
- candidate=nodes{bestIds(j)}.node; started=toc(clock);
- [v,~]=ctocscreen.v4.replay(candidate.q,eph,c,true);
- valid=v.independent&&v.initial_passed&&v.height_passed ...
-  &&~strcmp(v.status,'propagation_failure')&&v.total_dv_km_s<=c.search_max_dv_km_s;
- entry=struct('node_id',bestIds(j),'q',candidate.q,'screened',candidate.actual, ...
-  'verification',v,'partial_constraints_passed',valid,'started_s',started,'finished_s',toc(clock));
- checked{end+1}=entry; %#ok<AGROW>
- if valid&&(isempty(winner)||v.visit_count>winner.verification.visit_count ...
-   ||(v.visit_count==winner.verification.visit_count&&v.total_dv_km_s<winner.verification.total_dv_km_s))
-  winner=entry;
- end
- if valid&&v.visit_count==candidate.actual.visit_count, break; end
- % Preserve enough time for another check based on the observed check cost.
- if budget-toc(clock)<toc(clock)-started+1, break; end
+stats.reused_checkpoint_verification=false;
+if ~isempty(checkpoint)&&~isempty(checkpoint.best)&&strcmp(ctocscreen.v4.controlKey(checkpoint.best.q), ...
+  ctocscreen.v4.controlKey(nodes{bestIds(1)}.node.q))
+ checked=checkpoint.checked; winner=checkpoint.best;
+ stats.reused_checkpoint_verification=true;
+else
+ [checked,winner]=verifyBest(budget);
 end
 stats.verification_seconds=toc(clock)-stats.search_end_s;
 stats.source_unchanged=isequal(signature,ctocscreen.v4.signature());
@@ -118,7 +134,7 @@ bestScreened=rmfield(bestScreened,'trace');
 report=struct('manifest',manifest,'stats',stats,'roots',{roots},'tree_audit',audit, ...
  'tree_columns',{{'id','parent','root','burns','visits','dv','T','expanded','taken_children'}}, ...
  'events',{events},'improvements',improvements,'best_screened',bestScreened, ...
- 'checked',{checked},'best',winner,'rng_state',stream.State,'finished',true);
+ 'checked',{checked},'best',winner,'checkpoint_180',checkpoint,'rng_state',stream.State,'finished',true);
 report.stats.total_seconds=toc(clock); report.stats.within_budget=report.stats.total_seconds<=budget;
 save(fullfile(folder,'report.mat'),'report');
 report.stats.total_seconds=toc(clock); report.stats.within_budget=report.stats.total_seconds<=budget;
@@ -127,13 +143,34 @@ if isempty(winner)
  fprintf('FINAL no independently checked admissible prefix total=%.3fs folder=%s\n',report.stats.total_seconds,folder);
 else
  v=winner.verification;
- fprintf('FINAL independent=%d/35 J=%.12f partial_constraints=%d complete=%d T=%.6fd height=%.6f total=%.3fs within180=%d\n', ...
+ fprintf('FINAL independent=%d/35 J=%.12f partial_constraints=%d complete=%d T=%.6fd height=%.6f total=%.3fs withinBudget=%d\n', ...
   v.visit_count,v.total_dv_km_s,winner.partial_constraints_passed,v.passed,winner.q.T/86400, ...
   v.min_altitude_lower_km,report.stats.total_seconds,report.stats.within_budget);
 end
 fprintf('STATS roots=%d expanded=%d overcost=%d backtracks=%d four=%d duplicate_children=%d edges=%d\n', ...
  stats.roots,stats.expanded,stats.over_cost,stats.backtracks,stats.four_burn_backtracks,stats.duplicate_children,stats.unique_edges);
 
+ function [verifiedEntries,bestVerified]=verifyBest(limit)
+  % All validation work counts against the current wall-clock stage limit.
+  verifiedEntries={}; bestVerified=[];
+  for checkIndex=1:numel(bestIds)
+   if toc(clock)>=limit-1, break; end
+   candidate=nodes{bestIds(checkIndex)}.node; started=toc(clock);
+   [verification,~]=ctocscreen.v4.replay(candidate.q,eph,c,true);
+   valid=verification.independent&&verification.initial_passed&&verification.height_passed ...
+    &&~strcmp(verification.status,'propagation_failure')&&verification.total_dv_km_s<=c.search_max_dv_km_s;
+   entry=struct('node_id',bestIds(checkIndex),'q',candidate.q,'screened',candidate.actual, ...
+    'verification',verification,'partial_constraints_passed',valid,'started_s',started,'finished_s',toc(clock));
+   verifiedEntries{end+1}=entry; %#ok<AGROW>
+   if valid&&(isempty(bestVerified)||verification.visit_count>bestVerified.verification.visit_count ...
+     ||(verification.visit_count==bestVerified.verification.visit_count ...
+     &&verification.total_dv_km_s<bestVerified.verification.total_dv_km_s))
+    bestVerified=entry;
+   end
+   if valid&&verification.visit_count==candidate.actual.visit_count, break; end
+   if limit-toc(clock)<toc(clock)-started+1, break; end
+  end
+ end
  function id=addNode(node,parent)
   id=numel(nodes)+1;
   nodes{id}=struct('node',node,'parent',parent,'expanded',false,'children',[],'next',1,'over_cost',0);
