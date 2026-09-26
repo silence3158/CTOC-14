@@ -7,12 +7,12 @@ n=p.n; N=p.N; M=p.M; K=p.K; nf=numel(p.height_fractions);
 e.eq=zeros(6*(N-1),1); e.Jeq=sparse(numel(e.eq),n);
 e.g=zeros(2+N+nf*(N-1),1); e.Jg=sparse(numel(e.g),n);
 e.visit=zeros(3,K); e.Jvisit=sparse(3*K,n);
-e.radius=c.search_radius_km; e.ecc_radius=c.eccentricity_limit/.001;
-o=ctocscreen.v4.initialOrbit(q.x0,m); width=1/(m.re+590)-1/(m.re+610);
-e.g(1:2)=[1/(m.re+610)-o.alpha;o.alpha-1/(m.re+590)]/width;
-e.Jg(1:2,p.ix(:,1))=[-o.alpha_jac;o.alpha_jac].*p.sx.'/width;
-e.ecc=o.evec/.001; e.Jecc=sparse(3,n);
-e.Jecc(:,p.ix(:,1))=o.ecc_jac.*p.sx.'/.001;
+L=p.length_scale; e.radius=c.search_radius_km/L; e.ecc_radius=c.eccentricity_limit;
+o=ctocscreen.v4.initialOrbit(q.x0,m);
+e.g(1:2)=[1/(m.re+610)-o.alpha;o.alpha-1/(m.re+590)]*L;
+e.Jg(1:2,p.ix(:,1))=[-o.alpha_jac;o.alpha_jac].*p.sx.'*L;
+e.ecc=o.evec; e.Jecc=sparse(3,n);
+e.Jecc(:,p.ix(:,1))=o.ecc_jac.*p.sx.';
 U=zeros(3,N); for k=1:M, U(:,p.bn(k))=q.u(k,:).'; end
 sx=p.sx; rs=p.res_scale;
 for l=1:N-1
@@ -35,9 +35,9 @@ for l=1:N-1
    yy=deval(sol,tm); ym=yy(1:6);
    if derivatives, Pm=reshape(yy(7:end),6,6); end
   end
-  row=2+N+(l-1)*nf+f; rr=norm(ym(1:3)); e.g(row)=m.re+200+c.height_margin_km-rr;
+  row=2+N+(l-1)*nf+f; rr=norm(ym(1:3)); e.g(row)=(m.re+200+c.height_margin_km-rr)/L;
   if derivatives
-   h=[-ym(1:3).'/rr,zeros(1,3)]; fm=[ym(4:6);ctocscreen.v3Force(tm,ym(1:3),m)];
+   h=[-ym(1:3).'/rr,zeros(1,3)]/L; fm=[ym(4:6);ctocscreen.v3Force(tm,ym(1:3),m)];
    e.Jg(row,p.ix(:,l))=h*Pm.*sx.';
    if ~isempty(b), e.Jg(row,p.iu(:,b))=h*Pm(:,4:6)*p.sv; end
    e.Jg(row,p.it)=h*((1-a)*fm-Pm*fa)*p.st*p.Et(l,:)+h*(a*fm)*p.st*p.Et(l+1,:);
@@ -45,14 +45,14 @@ for l=1:N-1
  end
 end
 for l=1:N
- rr=norm(X(1:3,l)); e.g(2+l)=m.re+200+c.height_margin_km-rr;
- e.Jg(2+l,p.ix(1:3,l))=-X(1:3,l).'/rr.*sx(1:3).';
+ rr=norm(X(1:3,l)); e.g(2+l)=(m.re+200+c.height_margin_km-rr)/L;
+ e.Jg(2+l,p.ix(1:3,l))=-X(1:3,l).'/rr.*sx(1:3).'/L;
 end
 for j=1:K
  l=p.wn(j); [rt,vt]=ctocscreen.v3QueryTargets(p.eph,p.ids(j),t(l));
- e.visit(:,j)=X(1:3,l)-rt.'; rows=3*(j-1)+(1:3);
- e.Jvisit(rows,p.ix(1:3,l))=diag(sx(1:3));
- e.Jvisit(rows,p.it)=-vt.'*p.st*p.Et(l,:);
+ e.visit(:,j)=(X(1:3,l)-rt.')/L; rows=3*(j-1)+(1:3);
+ e.Jvisit(rows,p.ix(1:3,l))=diag(sx(1:3))/L;
+ e.Jvisit(rows,p.it)=-vt.'*p.st*p.Et(l,:)/L;
 end
 e.J=sum(vecnorm(q.u,2,2)); e.V=violation(e);
 e.max_position_defect=0; e.max_velocity_defect=0;

@@ -37,7 +37,9 @@ try
   if ~isempty(b), x(4:6)=x(4:6)+sum(q.u(b,:),1).'; end
   ix=offset+k; tr.times(ix)=t; tr.pre(:,ix)=before; tr.post(:,ix)=x;
   if k==numel(knots), break; end
-  [x,~,sol]=ctocscreen.v3Arc(x,t,knots(k+1),m,c,false,independent);
+  % Construction commits the accurate six-state flow also used at acceptance.
+  % Independent mode still starts at the epoch and integrates all targets anew.
+  [x,~,sol]=ctocscreen.v3Arc(x,t,knots(k+1),m,c,false,true);
   h=ctocscreen.v3Height(sol,m,c); height=height&&h.passed;
   tr.arcs{end+1}=sol; tr.arc_start(end+1)=t; tr.arc_end(end+1)=knots(k+1);
   tr.heights{end+1}=h;
@@ -93,7 +95,8 @@ function yes=canReuse(q,p)
 n=numel(p.tau);
 yes=q.T>=p.T&&p.T>0&&isequal(q.x0,p.x0)&&numel(q.tau)>=n ...
  &&isequal(q.tau(1:n),p.tau)&&isequal(q.u(1:n,:),p.u) ...
- &&all(q.tau(n+1:end)>=p.T)&&all(p.tau<p.T);
+ &&all(q.tau(n+1:end)>=p.T)&&all(p.tau<p.T) ...
+ &&any(q.tau(n+1:end)==p.T);
 end
 function [pen,inc,plane]=planePenalty(q,tr,c)
 inc=zeros(numel(q.tau),1); plane=inc;

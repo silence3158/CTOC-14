@@ -6,4 +6,5 @@ V=sum(abs(e.eq+e.Jeq*d))+sum(max(0,e.g+e.Jg*d)) ...
  +max(0,norm(e.ecc+e.Jecc*d)-e.ecc_radius);
 J=p.sv*sum(vecnorm(reshape(z(p.iu(:))+d(p.iu(:)),3,p.M),2,1));
 value=V; if fuel, value=J/p.sv+lambda*V; end
+if ~fuel, value=value+p.config.restoration_step_weight*norm(d); end
 end

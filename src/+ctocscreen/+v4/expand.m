@@ -37,7 +37,12 @@ for index=1:size(pairs,1)
  if toc(clock)>=enumerationEnd, break; end
  id=chosen(pairs(index,1)); duration=dt(pairs(index,2)); wait=0;
  if mod(index,4)==0, wait=min(duration*.25,3600); end
- if wait>0, xp=ctocscreen.v3Arc(x,t0,t0+wait,m,c); else, xp=x; end
+ if wait>0
+  % Reintegrate from the last real impulse; a temporary coast endpoint is not a control event.
+  if isempty(q.tau), anchor=0; xa=q.x0;
+  else, anchor=q.tau(end); xa=ctocscreen.v4.stateAt(parent.trace,anchor,'post'); end
+  xp=ctocscreen.v3Arc(xa,anchor,t0+wait,m,c,false,true);
+ else, xp=x; end
  rt=ctocscreen.v3QueryTargets(eph,id,t0+duration);
  policy=struct('max_revolutions',c.max_revolutions,'endpoint_tol_km',.005);
  try

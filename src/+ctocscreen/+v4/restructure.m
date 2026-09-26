@@ -2,8 +2,12 @@ function [child,report,warm]=restructure(parent,eph,c,iteration,budget)
 %RESTRUCTURE Changed topology is a new task; actual old coverage is re-evaluated.
 clock=tic; child=[]; warm=[]; report=struct('status','no_structure','seconds',0,'iterations',0);
 q=parent.q; M=numel(q.tau); if q.T<=0, return; end
-kind=mod(floor(iteration/c.structure_every)-1,4);
+kind=mod(floor(iteration/c.structure_every)-1,5);
 if M==0, kind=1; end
+if kind==4
+ [child,report]=ctocscreen.v4.rebuild(parent,eph,c,1+floor(iteration/(5*c.structure_every)));
+ return
+end
 ids=find(parent.actual.distance_km<=1); theta=parent.actual.witness_times_s(ids);
 switch kind
  case 0

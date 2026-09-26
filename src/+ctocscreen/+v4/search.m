@@ -9,9 +9,9 @@ manifest=struct('config',c,'signature',signature,'target_signature',eph.signatur
 save(fullfile(folder,'manifest.mat'),'manifest');
 fid=fopen(fullfile(folder,'events.jsonl'),'w','n','UTF-8'); assert(fid>0); cleanup=onCleanup(@()fclose(fid)); %#ok<NASGU>
 events={}; joints={}; warm={}; pending={}; best=[]; bestComplete=[]; bestVerified=[]; verifiedKeys={};
-nextRoot=1; stats=struct('rounds',0,'root_count',0,'expanded',0,'generated',0, ...
+nextRoot=1; rootServices=zeros(1,16); stats=struct('rounds',0,'root_count',0,'expanded',0,'generated',0, ...
  'shared_calls',0,'full_calls',0,'structure_calls',0,'resume_calls',0,'joint_iterations',0, ...
- 'actual_joint_improvements',0,'independent_checks',0,'complete_found',0, ...
+ 'actual_joint_improvements',0,'suffix_rebuilds',0,'independent_checks',0,'complete_found',0, ...
  'first_complete_s',NaN,'first_complete_dv_km_s',NaN,'notification',false, ...
  'expansion_seconds',0,'joint_seconds',0,'verification_seconds',0,'source_unchanged',false);
 for k=1:c.root_count
@@ -36,13 +36,27 @@ while toc(clock)<deadline
    probabilities=exp(score-max(score)); probabilities=probabilities/sum(probabilities);
    parentIndex=find(rand(stream)<=cumsum(probabilities),1);
   end
-  if mod(iteration,7)==0, [~,parentIndex]=min(attempts); end
+  if mod(iteration,3)==0
+   roots=cellfun(@(n)n.root_id,beam); rootServices(max(roots))=rootServicesAt(max(roots));
+   least=min(rootServices(roots)); eligible=find(rootServices(roots)==least);
+   [~,j]=max(score(eligible)); parentIndex=eligible(j);
+  end
  end
  parent=beam{parentIndex}; parent.attempts=parent.attempts+1; beam{parentIndex}=parent;
- [children,ar,memory]=ctocscreen.v4.expand(parent,eph,c,stream,memory,min(c.action_seconds,deadline-toc(clock)));
- stats.expanded=stats.expanded+1; stats.generated=stats.generated+numel(children);
- stats.expansion_seconds=stats.expansion_seconds+ar.seconds;
- record('expand',struct('root_id',parent.root_id,'parent_visits',parent.actual.visit_count,'report',ar));
+ rootServices(parent.root_id)=rootServicesAt(parent.root_id)+1;
+ if parent.q.T>=eph.model.horizon_s-1
+  [rebuilt,ar]=ctocscreen.v4.rebuild(parent,eph,c,parent.attempts);
+  children={};
+  if ~isempty(rebuilt)
+   rebuilt.root_id=nextRoot; nextRoot=nextRoot+1; children={rebuilt}; stats.suffix_rebuilds=stats.suffix_rebuilds+1;
+  end
+  record('suffix_rebuild',ar);
+ else
+  [children,ar,memory]=ctocscreen.v4.expand(parent,eph,c,stream,memory,min(c.action_seconds,deadline-toc(clock)));
+  stats.expanded=stats.expanded+1; stats.expansion_seconds=stats.expansion_seconds+ar.seconds;
+  record('expand',struct('root_id',parent.root_id,'parent_visits',parent.actual.visit_count,'report',ar));
+ end
+ stats.generated=stats.generated+numel(children);
  for j=1:numel(children), consider(children{j}); end
  if ~isempty(pending)&&mod(iteration,3)==0&&toc(clock)<deadline
   job=pending{1}; pending(1)=[];
@@ -64,16 +78,28 @@ while toc(clock)<deadline
   representatives=[beam,children]; counts=cellfun(@(n)n.actual.visit_count,representatives);
   [~,j]=max(counts); seed=representatives{j}; ids=find(seed.actual.distance_km<=1);
   if ~isempty(ids)
+   continuation=[]; key=ctocscreen.v4.controlKey(seed.q);
+   for j=numel(pending):-1:1
+    if strcmp(pending{j}.scope,'full')&&strcmp(pending{j}.physical_key,key) ...
+      &&isequal(pending{j}.task_ids,ids)&&isequal(pending{j}.theta,seed.actual.witness_times_s(ids))
+     continuation=pending{j}; pending(j)=[]; break
+    end
+   end
    [child,jr,wr]=ctocscreen.v4.joint(seed,ids,seed.actual.witness_times_s(ids),'full',seed.q.T,eph,c, ...
-    min(c.scope_seconds(3),deadline-toc(clock)));
+    min(c.scope_seconds(3),deadline-toc(clock)),continuation);
    stats.full_calls=stats.full_calls+1; addJoint(jr,wr);
    if ~isempty(child), child.origin='full_history'; children{end+1}=child; consider(child); end
   end
  end
- if mod(iteration,c.structure_every)==0&&toc(clock)<deadline
+ if mod(iteration,c.structure_every)==0&&toc(clock)<deadline&&parent.q.T<eph.model.horizon_s-1
   [child,jr,wr]=ctocscreen.v4.restructure(parent,eph,c,iteration,min(c.scope_seconds(2),deadline-toc(clock)));
   stats.structure_calls=stats.structure_calls+1; addJoint(jr,wr);
-  if ~isempty(child), children{end+1}=child; consider(child); end
+   if ~isempty(child)
+    if strcmp(child.origin,'suffix_rebuild')
+     child.root_id=nextRoot; nextRoot=nextRoot+1; stats.suffix_rebuilds=stats.suffix_rebuilds+1;
+    end
+    children{end+1}=child; consider(child);
+   end
  end
  % Feedback affects competing physical children, with a nonzero exploration floor.
  for j=1:numel(children)
@@ -134,9 +160,9 @@ fprintf('V4 FINAL independent=%d/35 dv=%.12f passed=%d elapsed=%.3f folder=%s\n'
   joints{end+1}=jr;
   if ~isempty(wr)
    warm{end+1}=rmfield(wr,{'candidate','best'});
-   if wr.resumable&&wr.resume_count<2&&strcmp(jr.status,'budget_interrupted')
+   if wr.resumable&&wr.resume_count<8&&~ismember(jr.status,{'local_stationary','restoration_stalled','numerical_failure','trust_stalled'})
     duplicate=cellfun(@(j)strcmp(j.task_key,wr.task_key),pending); pending(duplicate)=[];
-    pending{end+1}=wr; if numel(pending)>6, pending(1)=[]; end
+    pending{end+1}=wr; if numel(pending)>12, pending(1)=[]; end
    end
   end
   if isfield(jr,'iterations'), stats.joint_iterations=stats.joint_iterations+jr.iterations; end
@@ -145,6 +171,9 @@ fprintf('V4 FINAL independent=%d/35 dv=%.12f passed=%d elapsed=%.3f folder=%s\n'
    stats.actual_joint_improvements=stats.actual_joint_improvements+1;
   end
   record('joint',jr);
+ end
+ function value=rootServicesAt(id)
+  value=0; if id<=numel(rootServices), value=rootServices(id); end
  end
  function consider(node)
   if ~node.actual.initial_passed||~node.actual.height_passed||strcmp(node.actual.status,'propagation_failure'), return; end
