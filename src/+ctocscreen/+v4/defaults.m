@@ -25,7 +25,7 @@ c=struct('seed',888,'budget_s',300,'root_count',4,'beam_width',16, ...
  'layer_diversity',0.5,'parent_cost_weight',0.1,'time_price_km_s',0.3,'time_reserve',0.1,'no_event_cost_km_s',2,'estimate_seconds',1,'min_leg_s',10800, ...
  'absorb_miss_km',2000,'absorb_residual_km',1,'absorb_max_extra_km_s',0.3,'absorb_candidates',3, ...
  'absorb_burns',2,'absorb_seconds',5,'absorb_newton_iterations',12,'absorb_newton_km',0.1,'tail_iterations',48,'tail_burns',4,'tail_seconds',6, ...
- 'b_share',0.3,'root_service_every',6,'beam_layers',8,'per_layer',3,'root_keep',4);
+ 'b_share',0.3,'heuristic_kind',1,'root_service_every',6,'beam_layers',8,'per_layer',3,'root_keep',4);
 if nargin>0
  names=fieldnames(overrides);
  assert(all(ismember(names,fieldnames(c))),'ctocscreen:v4:config','Unknown V4 option.');
@@ -33,8 +33,12 @@ if nargin>0
 end
 names=fieldnames(c);
 for k=1:numel(names)
+ if strcmp(names{k},'heuristic_kind'), continue; end
  validateattributes(c.(names{k}),{'double'},{'real','finite','nonnegative'});
 end
+% heuristic_kind: 1 or 'events' = two-body crossing estimate, 2 or 'lambert'.
+if isnumeric(c.heuristic_kind), kinds={'events','lambert'}; c.heuristic_kind=kinds{c.heuristic_kind}; end
+assert(ismember(c.heuristic_kind,{'events','lambert'}));
 assert(c.budget_s>0&&c.root_count>=1&&c.beam_width>=2);
 assert(c.search_radius_km>0&&c.search_radius_km<=1);
 % Model constraints sit strictly inside the replay acceptance limits.

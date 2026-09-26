@@ -24,7 +24,12 @@ for k=1:numel(valid)
  if ~isfield(valid{k},'heuristic_H')||isnan(valid{k}.heuristic_H)
   valid{k}.heuristic_H=NaN;
   if ~isempty(eph)
-   valid{k}.heuristic_H=ctocscreen.v4.estimate(valid{k},eph,c,stream); estimates=estimates+1;
+   if strcmp(c.heuristic_kind,'lambert')
+    valid{k}.heuristic_H=ctocscreen.v4.estimate(valid{k},eph,c,stream);
+   else
+    [~,info]=ctocscreen.v4.events(valid{k},eph,c); valid{k}.heuristic_H=info.H;
+   end
+   estimates=estimates+1;
   end
  end
 end
