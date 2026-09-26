@@ -4,7 +4,7 @@ function [cands,report]=crossing(node,eph,c,ev,info,stream,budget)
 % continuation (a stored solution, so no burn is implied by a wait). Each
 % proposal is a two-body Lambert seed; J2 correction and replay decide reality.
 clock=tic; m=eph.model; cands=struct('target',{},'departure',{},'arrival',{},'x',{},'v',{},'dv',{},'score',{},'kind',{});
-report=struct('events',numel(ev),'lambert',0,'branches',0,'seconds',0);
+report=struct('events',numel(ev),'events_after_reserve',NaN,'lambert',0,'branches',0,'seconds',0,'target_best',inf(35,1));
 if isempty(ev)||isempty(info.sol), return; end
 T=node.q.T; sol=info.sol;
 % Time is a shared resource: arrivals later than the remaining pace
@@ -14,6 +14,12 @@ T=node.q.T; sol=info.sol;
 left=sum(node.actual.distance_km>1);
 pace=max(c.min_flight_s,(1-c.time_reserve)*(m.horizon_s-T)/max(1,left));
 timeCost=@(arrival)c.time_price_km_s*max(0,(arrival-T)/pace-1);
+% Hard time reserve: after this arrival every other remaining target still
+% needs at least min_leg_s. Later events are not proposed (search rule, no
+% physical constraint; E4 showed late legs are where cost explodes).
+latestArrival=m.horizon_s-max(0,left-1)*c.min_leg_s;
+ev=ev([ev.time]<=latestArrival); report.events_after_reserve=numel(ev);
+if isempty(ev), return; end
 % Rank events by the cheap estimate; keep the best few per target for spread.
 [~,order]=sort([ev.dv_est]+timeCost([ev.time])); picked=[]; perTarget=zeros(35,1);
 for k=order
@@ -57,4 +63,8 @@ for k=picked
  if toc(clock)>=budget, break; end
 end
 report.seconds=toc(clock);
+% Per-target cheapest Lambert proposal (km/s): tracks realized legs far better
+% than the two-body tangential estimate (eval_v4_estimator: Pearson 0.985 vs 0.261).
+report.target_best=inf(35,1);
+for k=1:numel(cands), report.target_best(cands(k).target)=min(report.target_best(cands(k).target),cands(k).dv); end
 end

@@ -29,7 +29,7 @@ while toc(clock)<deadline&&~isempty(beam)
   next=[next,children]; %#ok<AGROW>
  end
  if isempty(next), break; end
- [beam,~]=ctocscreen.v4.selectBeam(next,c,eph);
+ [beam,~]=ctocscreen.v4.selectBeam(next,c,eph,stream);
  counts=cellfun(@(n)n.actual.visit_count,beam); [kmax,j]=max(counts);
  history(end+1,:)=[toc(clock),kmax,beam{j}.actual.total_dv_km_s,numel(complete)]; %#ok<AGROW>
 end

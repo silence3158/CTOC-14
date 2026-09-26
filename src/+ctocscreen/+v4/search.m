@@ -9,12 +9,12 @@ manifest=struct('config',c,'signature',signature,'target_signature',eph.signatur
 save(fullfile(folder,'manifest.mat'),'manifest');
 fid=fopen(fullfile(folder,'events.jsonl'),'w','n','UTF-8'); assert(fid>0); cleanup=onCleanup(@()fclose(fid)); %#ok<NASGU>
 events={}; joints={}; warm={}; pending={}; best=[]; bestComplete=[]; bestVerified=[]; verifiedKeys={};
-checkpoint=[]; checkpointElapsed=NaN; checkpointReport=[]; sharedTabu=struct('keys',{{}},'failures',[]); structureCount=0;
+checkpoint=[]; checkpointElapsed=NaN; checkpointReport=[]; absorbTabu={}; tailDone={};
 nextRoot=1; rootServices=zeros(1,16); stats=struct('rounds',0,'root_count',0,'expanded',0,'generated',0, ...
  'shared_calls',0,'full_calls',0,'structure_calls',0,'resume_calls',0,'joint_iterations',0, ...
  'actual_joint_improvements',0,'suffix_rebuilds',0,'independent_checks',0,'complete_found',0, ...
  'first_complete_s',NaN,'first_complete_dv_km_s',NaN,'notification',false, ...
- 'expansion_seconds',0,'joint_seconds',0,'estimate_calls',0,'estimate_seconds',0,'verification_seconds',0,'source_unchanged',false);
+ 'expansion_seconds',0,'joint_seconds',0,'estimate_calls',0,'estimate_seconds',0,'absorb_calls',0,'absorbed',0,'tail_calls',0,'b_seconds',0,'verification_seconds',0,'source_unchanged',false);
 try
 for k=1:c.root_count
  node=ctocscreen.v4.root(nextRoot,eph,c,stream); nextRoot=nextRoot+1;
@@ -22,28 +22,25 @@ for k=1:c.root_count
 end
 deadline=max(0,c.budget_s-c.verify_reserve_s); best=beam{1};
 record('start',struct('cold_start',true,'budget_s',c.budget_s,'seed',c.seed));
+% 2026-09-26 schedule (docs/V4_A_LAYER_CROSSING_20260926.md, section 10):
+% construction first; periodic full-history B and structure operators are off
+% (E3: early-control steps are amplified 1e4-1e9 on long chains). Tail B and
+% encounter absorption act only on the last burns.
+bSeconds=0;
 while toc(clock)<deadline
  stats.rounds=stats.rounds+1; iteration=stats.rounds;
  if isempty(beam)||mod(iteration,c.root_every)==0
   node=ctocscreen.v4.root(nextRoot,eph,c,stream); nextRoot=nextRoot+1;
   beam{end+1}=node; stats.root_count=stats.root_count+1; parentIndex=numel(beam);
  else
-  visits=cellfun(@(n)n.actual.visit_count,beam); attempts=cellfun(@(n)n.attempts,beam);
-  % Estimated mission cost J+H (km/s) trades against depth; H is heuristic.
+  % Rotate through the beam: least-expanded first, ties by estimated J+H.
+  attempts=cellfun(@(n)n.attempts,beam);
   costs=cellfun(@(n)n.actual.total_dv_km_s+estimateOf(n),beam);
-  weights=ones(size(beam));
-  for k=1:numel(beam), [memory,weights(k)]=ctocscreen.v4.feedback(memory,'query',beam{k},c); end
-  score=visits-.8*attempts-c.parent_cost_weight*costs+log(weights);
-  [~,parentIndex]=max(score);
-  if rand(stream)<c.exploration
-   probabilities=exp(score-max(score)); probabilities=probabilities/sum(probabilities);
-   parentIndex=find(rand(stream)<=cumsum(probabilities),1);
-  end
-  if mod(iteration,3)==0
-   roots=cellfun(@(n)n.root_id,beam); rootServices(max(roots))=rootServicesAt(max(roots));
-   least=min(rootServices(roots)); eligible=find(rootServices(roots)==least);
-   [~,j]=max(score(eligible)); parentIndex=eligible(j);
-  end
+  open=cellfun(@(n)n.actual.visit_count<35&&n.q.T<eph.model.horizon_s-1,beam);
+  if ~any(open), open=true(size(beam)); end
+  key=attempts+1e-3*costs/max(1,max(costs)); key(~open)=Inf;
+  [~,parentIndex]=min(key);
+  if rand(stream)<c.exploration, pool=find(open); parentIndex=pool(randi(stream,numel(pool))); end
  end
  parent=beam{parentIndex}; parent.attempts=parent.attempts+1; beam{parentIndex}=parent;
  rootServices(parent.root_id)=rootServicesAt(parent.root_id)+1;
@@ -61,75 +58,44 @@ while toc(clock)<deadline
  end
  stats.generated=stats.generated+numel(children);
  for j=1:numel(children), consider(children{j}); end
- if ~isempty(pending)&&mod(iteration,3)==0&&toc(clock)<deadline
-  job=pending{1}; pending(1)=[];
-  [child,jr,wr]=ctocscreen.v4.joint(job.candidate,job.task_ids,job.theta,job.scope,job.focus,eph,c, ...
-   min(c.scope_seconds(2),deadline-toc(clock)),job);
-  stats.resume_calls=stats.resume_calls+1; addJoint(jr,wr);
-  if ~isempty(child), children{end+1}=child; consider(child); end
+ % Step 3: fold a following encounter into the newest burn (one burn, two targets).
+ transfer=cellfun(@(n)any(strcmp(n.origin,{'crossing_transfer','delayed_impulse','absorbed_encounter'})),children);
+ for j=find(transfer)
+  if toc(clock)>=deadline, break; end
+  bt=tic; [child,rr]=ctocscreen.v4.absorb(children{j},eph,c,min(c.absorb_seconds,deadline-toc(clock)),absorbTabu);
+  bSeconds=bSeconds+toc(bt); stats.absorb_calls=stats.absorb_calls+1;
+  absorbTabu{end+1}=sprintf('%s|%d',ctocscreen.v4.controlKey(children{j}.q),rr.target); %#ok<AGROW>
+  if ~isempty(child), stats.absorbed=stats.absorbed+1; children{end+1}=child; consider(child); end %#ok<AGROW>
+  record('absorb',rmfield(rr,'joint'));
  end
- % One shared-arc job; its scope escalates with executed failures of that task.
- if ~isempty(children)&&toc(clock)<deadline
-  counts=cellfun(@(n)n.actual.visit_count,children); [~,j]=max(counts); selected=children{j};
-  [child,jr,wr,sharedTabu]=ctocscreen.v4.shared(selected,eph,c,min(c.scope_seconds,deadline-toc(clock)),sharedTabu);
-  stats.shared_calls=stats.shared_calls+1; addJoint(jr,wr);
-  if ~isempty(child), children{end+1}=child; consider(child); end
- end
- if mod(iteration,c.full_every)==0&&toc(clock)<deadline
-  representatives=[beam,children]; counts=cellfun(@(n)n.actual.visit_count,representatives);
-  [~,j]=max(counts); seed=representatives{j}; ids=find(seed.actual.distance_km<=1);
-  if ~isempty(ids)
-   continuation=[]; key=ctocscreen.v4.controlKey(seed.q);
-   for j=numel(pending):-1:1
-    if strcmp(pending{j}.scope,'full')&&strcmp(pending{j}.physical_key,key) ...
-      &&isequal(pending{j}.task_ids,ids)&&isequal(pending{j}.theta,seed.actual.witness_times_s(ids))
-     continuation=pending{j}; pending(j)=[]; break
+ % Step 2: tail B on the cheapest deep candidate while B stays under its share.
+ if bSeconds<c.b_share*toc(clock)&&toc(clock)<deadline
+  pool=[beam,children]; deep=cellfun(@(n)numel(n.q.tau)>=2&&n.actual.visit_count>=2,pool);
+  if any(deep)
+   pool=pool(deep); counts=cellfun(@(n)n.actual.visit_count,pool);
+   top=pool(counts==max(counts)); [~,j]=min(cellfun(@(n)n.actual.total_dv_km_s,top)); seed=top{j};
+   key=[ctocscreen.v4.controlKey(seed.q),'|tail'];
+   if ~any(strcmp(tailDone,key))
+    tailDone{end+1}=key; ids=find(seed.actual.distance_km<=1); M=numel(seed.q.tau); %#ok<AGROW>
+    cc=c; cc.joint_iterations=c.tail_iterations; bt=tic;
+    [child,jr,wr]=ctocscreen.v4.joint(seed,ids,seed.actual.witness_times_s(ids),'tail', ...
+     seed.q.tau(max(1,M-c.tail_burns+1)),eph,cc,min(c.tail_seconds,deadline-toc(clock)));
+    bSeconds=bSeconds+toc(bt); stats.tail_calls=stats.tail_calls+1; addJoint(jr,[]);
+    if ~isempty(child)&&jr.active_passed&&jr.control_changed
+     child.origin='tail_b'; child.attempts=0; children{end+1}=child; consider(child);
     end
-   end
-   [child,jr,wr]=ctocscreen.v4.joint(seed,ids,seed.actual.witness_times_s(ids),'full',seed.q.T,eph,c, ...
-    min(c.scope_seconds(3),deadline-toc(clock)),continuation);
-   stats.full_calls=stats.full_calls+1; addJoint(jr,wr);
-   if ~isempty(child), child.origin='full_history'; child.heuristic_H=NaN; children{end+1}=child; consider(child); end
-  end
- end
- if mod(iteration,c.structure_every)==0&&toc(clock)<deadline
-  % A fresh root has no control history; use the best-covered nonempty trajectory.
-  target=parent;
-  if target.q.T<=0||target.q.T>=eph.model.horizon_s-1
-   pool=[beam,children]; ok=cellfun(@(n)n.q.T>0&&n.q.T<eph.model.horizon_s-1,pool);
-   target=[];
-   if any(ok)
-    pool=pool(ok); counts=cellfun(@(n)n.actual.visit_count,pool); [~,j]=max(counts); target=pool{j};
-   end
-  end
-  if ~isempty(target)
-   structureCount=structureCount+1;
-   [child,jr,wr]=ctocscreen.v4.restructure(target,eph,c,structureCount,min(c.scope_seconds(2),deadline-toc(clock)));
-   stats.structure_calls=stats.structure_calls+1; jr.structure_index=structureCount; addJoint(jr,wr);
-   if ~isempty(child)
-    if strcmp(child.origin,'suffix_rebuild')
-     child.root_id=nextRoot; nextRoot=nextRoot+1; stats.suffix_rebuilds=stats.suffix_rebuilds+1;
-    end
-    children{end+1}=child; consider(child);
    end
   end
  end
  children=children(cellfun(@(n)~strcmp(n.actual.status,'propagation_failure') ...
   &&n.actual.initial_passed&&n.actual.height_passed&&isfinite(n.actual.total_dv_km_s),children));
- % Feedback affects competing physical children, with a nonzero exploration floor.
- for j=1:numel(children)
-  [memory,weight]=ctocscreen.v4.feedback(memory,'query',children{j},c);
-  if weight<1&&rand(stream)>max(c.exploration,weight)
-   children{j}.attempts=children{j}.attempts+1;
-  end
- end
- et=tic; [beam,estimated]=ctocscreen.v4.selectBeam([beam,children],c,eph);
+ et=tic; [beam,estimated]=ctocscreen.v4.selectBeam([beam,children],c,eph,stream);
  stats.estimate_calls=stats.estimate_calls+estimated; stats.estimate_seconds=stats.estimate_seconds+toc(et);
- [memory,~]=ctocscreen.v4.feedback(memory,'evaporate',[],c);
+ stats.b_seconds=bSeconds;
  if mod(iteration,c.log_every)==0
-  fprintf('V4 round=%d elapsed=%.1f best=%d/35 dv=%.9f beam=%d B=%d/%d/%d\n', ...
+  fprintf('V4 round=%d elapsed=%.1f best=%d/35 dv=%.9f beam=%d absorb=%d/%d tail=%d B=%.0fs\n', ...
    iteration,toc(clock),best.actual.visit_count,best.actual.total_dv_km_s,numel(beam), ...
-   stats.shared_calls,stats.full_calls,stats.structure_calls);
+   stats.absorbed,stats.absorb_calls,stats.tail_calls,bSeconds);
  end
  record('round',struct('round',iteration,'best_visits',best.actual.visit_count, ...
   'best_dv',best.actual.total_dv_km_s,'beam_size',numel(beam)));

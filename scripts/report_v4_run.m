@@ -10,5 +10,10 @@ fprintf('Folder: %s\nCold start: %d; seed: %d\n',folder,result.manifest.cold_sta
 fprintf('Independent: %d/35; raw delta-V: %.12f km/s; complete pass: %d\n',a.visit_count,a.total_dv_km_s,a.passed);
 fprintf('Height lower bound: %.9f km; initial orbit: %d; time: %.3f s\n',a.min_altitude_lower_km,a.initial_passed,result.best.q.T);
 fprintf('Actual elapsed: %.3f s; source unchanged: %d; ATK aligned: %d\n',result.stats.total_seconds,result.stats.source_unchanged,a.official_alignment_verified);
-fprintf('B calls shared/full/structure: %d/%d/%d; total iterations: %d\n',result.stats.shared_calls,result.stats.full_calls,result.stats.structure_calls,result.stats.joint_iterations);
+st=result.stats;
+if isfield(st,'absorb_calls')
+ fprintf('Absorbed %d/%d; tail-B %d; B seconds %.1f; iterations %d\n',st.absorbed,st.absorb_calls,st.tail_calls,st.b_seconds,st.joint_iterations);
+else
+ fprintf('B calls shared/full/structure: %d/%d/%d; total iterations: %d\n',st.shared_calls,st.full_calls,st.structure_calls,st.joint_iterations);
+end
 end

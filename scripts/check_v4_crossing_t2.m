@@ -19,7 +19,7 @@ while toc(clock)<900&&step<120
   next=[next,children]; %#ok<AGROW>
  end
  if isempty(next), break; end
- [pool,~]=ctocscreen.v4.selectBeam(next,c,eph);
+ [pool,~]=ctocscreen.v4.selectBeam(next,c,eph,stream);
  beam=pool(1:min(width,numel(pool)));
  b=beam{1}; history(end+1,:)=[toc(clock),b.actual.visit_count,b.actual.total_dv_km_s,b.q.T]; %#ok<AGROW>
  fprintf('step %3d t=%6.1f visits=%2d dv=%8.4f T=%.2f d H=%.2f\n',step,history(end,1),history(end,2),history(end,3),b.q.T/86400,b.heuristic_H);

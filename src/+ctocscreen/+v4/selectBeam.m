@@ -1,10 +1,11 @@
-function [beam,estimates]=selectBeam(nodes,c,eph)
+function [beam,estimates]=selectBeam(nodes,c,eph,stream)
 %SELECTBEAM Layered beam: compare candidates only within equal visit counts.
 % Rank within a layer by f = J + H + P (km/s): J raw spent Delta-V, H the
-% crossing-event estimate of remaining cost (heuristic, not a bound), P a
+% Lambert crossing estimate of remaining cost (estimate.m, heuristic), P a
 % time-overrun penalty. Layers after Beam P-ACO depth levels. Within a layer
 % the plane normal and orbit shape keep representatives apart.
 if nargin<3, eph=[]; end
+if nargin<4, stream=RandStream('mt19937ar','Seed',0); end
 estimates=0;
 valid={}; keys={};
 for k=1:numel(nodes)
@@ -23,7 +24,7 @@ for k=1:numel(valid)
  if ~isfield(valid{k},'heuristic_H')||isnan(valid{k}.heuristic_H)
   valid{k}.heuristic_H=NaN;
   if ~isempty(eph)
-   [~,info]=ctocscreen.v4.events(valid{k},eph,c); valid{k}.heuristic_H=info.H; estimates=estimates+1;
+   valid{k}.heuristic_H=ctocscreen.v4.estimate(valid{k},eph,c,stream); estimates=estimates+1;
   end
  end
 end

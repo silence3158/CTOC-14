@@ -8,8 +8,8 @@ fprintf(fid,'Independent target visits: **%d/35**. Raw total delta-V: **%.12f km
 fprintf(fid,'Height lower bound: %.9f km. Initial orbit pass: %d. Duration: %.3f s.\n\n', ...
  a.min_altitude_lower_km,a.initial_passed,result.best.q.T);
 fprintf(fid,'Source signature unchanged: %d. Empty historical input: 1. Official alignment verified: 0.\n\n',s.source_unchanged);
-fprintf(fid,'Full-history B calls: %d. Shared-arc calls: %d. Structure calls: %d. Joint iterations: %d.\n\n', ...
- s.full_calls,s.shared_calls,s.structure_calls,s.joint_iterations);
+fprintf(fid,'Absorbed encounters: %d of %d calls. Tail-B calls: %d. B seconds: %.1f. Joint iterations: %d.\n\n', ...
+ s.absorbed,s.absorb_calls,s.tail_calls,s.b_seconds,s.joint_iterations);
 fprintf(fid,'Search pool threshold: 6.1 km/s. User notification threshold: <8 km/s with independent 35/35.\n\n');
 fprintf(fid,'Actual joint improvements retaining their active targets: %d (may be partial missions).\n\n',s.actual_joint_improvements);
 if isfield(result,'checkpoint_verification')&&~isempty(result.checkpoint_verification)
