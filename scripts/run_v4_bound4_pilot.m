@@ -1,4 +1,4 @@
-function report=run_v4_bound4_pilot(label,budget,returnLimit)
+function report=run_v4_bound4_pilot(label,budget,returnLimit,seed)
 %RUN_V4_BOUND4_PILOT Cold, cost-bounded partial-coverage diagnostic (no rollout).
 % Existing A-layer expansion; each physical node expanded once. Cached sibling
 % queues and deferred paths support four-impulse backtracking without replaying
@@ -6,12 +6,14 @@ function report=run_v4_bound4_pilot(label,budget,returnLimit)
 if nargin<1, label=char(datetime('now','Format','yyyyMMdd_HHmmss')); end
 if nargin<2, budget=180; end
 if nargin<3, returnLimit=Inf; end
+if nargin<4, seed=888; end
+validateattributes(seed,{'double'},{'scalar','finite','integer','>=',0,'<=',2^32-1});
 validateattributes(budget,{'double'},{'scalar','finite','>=',180});
 assert(isscalar(returnLimit)&&returnLimit>0&& ...
  (isinf(returnLimit)||(isfinite(returnLimit)&&returnLimit==fix(returnLimit))));
 checkpointEnabled=budget>180&&isinf(returnLimit);
 sim=fileparts(fileparts(mfilename('fullpath'))); addpath(fullfile(sim,'src'));
-clock=tic; reserve=18; depth=4; seed=888;
+clock=tic; reserve=18; depth=4;
 folder=fullfile(sim,'runs/v4/development',['bound4_' label]);
 assert(~isfolder(folder),'Use a new output label.'); mkdir(folder);
 c=ctocscreen.v4.defaults(struct('seed',seed,'budget_s',budget));
