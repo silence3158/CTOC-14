@@ -1,7 +1,8 @@
-function result=check_v4_shared_arc
+function result=check_v4_shared_arc(label)
 %CHECK_V4_SHARED_ARC One decision-bearing component check before warm search.
 sim=fileparts(fileparts(mfilename('fullpath'))); addpath(fullfile(sim,'src'));
-folder=fullfile(sim,'runs/v4/development/shared_arc_integration_check_01');
+if nargin<1, label='02'; end
+folder=fullfile(sim,'runs/v4/development',['shared_arc_integration_check_' label]);
 assert(~isfolder(folder)); mkdir(folder); clock=tic;
 c=ctocscreen.v4.defaults(); sig=ctocscreen.v4.signature();
 eph=ctocscreen.v3LoadTargetEphemeris(fullfile(sim,'runs/v3/preprocessing/targets_20260923_release/target_ephemeris.mat'));
@@ -19,7 +20,8 @@ for k=1:numel(children)
  child=children{k}; [v,~]=ctocscreen.v4.replay(child.q,eph,c,true);
  active=node.actual.distance_km<=1;
  assert(v.independent&&v.initial_passed&&v.height_passed&&all(v.distance_km(active)<=1));
- assert(v.distance_km(22)<=1&&v.visit_count>=21&&numel(child.q.tau)==numel(node.q.tau));
+ fprintf('CHILD %d visits=%d added=%s target22=%.6f J=%.9f\n',k,v.visit_count,mat2str(find(v.distance_km<=1&~active).'),v.distance_km(22),v.total_dv_km_s);
+ assert(v.visit_count>=21&&numel(child.q.tau)==numel(node.q.tau));
  M=numel(parent.q.tau);
  assert(isequal(child.q.u(1:M,:),parent.q.u)&&isequal(child.q.tau(1:M),parent.q.tau));
  assert(child.q.tau(end)>=parent.q.T&&child.generation==parent.generation+1);
@@ -27,5 +29,6 @@ for k=1:numel(children)
 end
 result.seconds=toc(clock); result.source_unchanged=isequal(sig,ctocscreen.v4.signature()); assert(result.source_unchanged);
 save(fullfile(folder,'result.mat'),'result');
+assert(any(cellfun(@(s)s.verification.distance_km(22)<=1,result.verified)),'Target22 not recovered among alternatives.');
 fprintf('SHARED CHECK children=%d attempts=%d far_accepted=%d seconds=%.3f\n',numel(children),report.attempts,report.far_accepted,result.seconds);
 end
