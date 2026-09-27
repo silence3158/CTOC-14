@@ -10,13 +10,14 @@ function report=run_v4_incumbent_pilot(label,budget,seed,options)
 % return_limit-th landing stops it and cascades (breadth cutoff, after
 % Ginsberg & Harvey 1990). Proposals whose predicted two-body leg cost exceeds
 % the remaining bound plus a margin are dropped before J2 guidance.
-% Empty historical input: phase 2 only uses this run's phase-1 result.
+% Default is cold. An explicit warm_input_file loads only the authorized
+% teammate reconstructed fixed controls; independent replay replaces phase 1.
 if nargin<1||isempty(label), label=char(datetime('now','Format','yyyyMMdd_HHmmss')); end
 if nargin<2||isempty(budget), budget=300; end
 if nargin<3||isempty(seed), seed=888; end
 if nargin<4||isempty(options), options=struct(); end
 o=struct('phase1_cap_s',200,'broaden_at',2,'return_limit',4,'depth',4,'margin_km_s',0.1, ...
- 'reserve_s',18,'epsilon_km_s',1e-6,'min_phase2_s',30,'exclude_window_s',600);
+ 'reserve_s',18,'epsilon_km_s',1e-6,'min_phase2_s',30,'exclude_window_s',600,'warm_input_file','');
 names=fieldnames(options); assert(isempty(names)||all(isfield(o,names)),'ctocscreen:v4:option','Unknown option.');
 for kn=1:numel(names), o.(names{kn})=options.(names{kn}); end
 validateattributes(budget,{'double'},{'scalar','finite','positive'});
@@ -38,10 +39,47 @@ manifest=struct('cold_start',true,'history_inputs',{{}},'initial_candidates',0,'
  'total_budget_s',budget,'seed',seed,'phase1','formal V4 search.m with stop_on_complete', ...
  'phase2','incumbent-bounded DFBnB from the incumbent path; broaden/limit landings; budget filter', ...
  'started_utc',char(datetime('now','TimeZone','UTC','Format','yyyy-MM-dd HH:mm:ss')));
+warm=~isempty(o.warm_input_file); sourceLabel='phase1_beam'; rootLabel='phase1_lineage';
+if warm
+ assert(isfile(o.warm_input_file),'Warm input missing.');
+ manifest.cold_start=false; manifest.history_inputs={o.warm_input_file}; manifest.initial_candidates=1;
+ manifest.warm_input_sha256=ctocscreen.v3FileHash(o.warm_input_file);
+ manifest.phase1='independent fixed-control replay of teammate reconstruction; no beam initialization';
+ sourceLabel='teammate_reconstruction'; rootLabel='authorized_teammate_warm';
+end
 save(fullfile(folder,'manifest.mat'),'manifest');
 fid=fopen(fullfile(folder,'events.jsonl'),'w','n','UTF-8'); assert(fid>0);
 cleanup=onCleanup(@()fclose(fid)); events={};
 %% Phase 1: formal search until its first independently verified complete solution.
+if warm
+ t1=toc(clock); loaded=load(o.warm_input_file,'result'); r=loaded.result;
+ assert(strcmp(r.branch_rule,'method_search')&&strcmp(r.initial_source,'configured_start'), ...
+  'Use the corrected multirevolution teammate reconstruction.');
+ s=r.reconstructed_schedule;
+ q=struct('x0',r.initial_state(:),'tau',s.maneuver_times_s(:),'u',s.delta_v_km_s, ...
+  'T',s.duration_s,'witness',s.witness_times_s(:));
+ assert(strcmp(s.dynamics_id,'central_j2')&&numel(q.tau)==35&&all(diff(q.tau)>0));
+ xCheck=ctocscreen.initialState(s.initial_q,eph.model.mu,eph.model.re);
+ assert(norm(xCheck(:)-q.x0)<1e-8,'Archived Cartesian and orbital initial states disagree.');
+ [v,tr]=ctocscreen.v4.replay(q,eph,c,true);
+ assert(isequal(tr.q.x0,q.x0)&&isequal(tr.q.tau,q.tau)&&isequal(tr.q.u,q.u)&&tr.q.T==q.T, ...
+  'Warm adapter changed fixed controls.');
+ warmInput=struct('q',q,'verification',v,'input_sha256',manifest.warm_input_sha256, ...
+  'atk_sha256',r.atk_sha256,'archived_verification',r.reconstructed_verification);
+ save(fullfile(folder,'warm_input.mat'),'warmInput');
+ assert(v.passed&&v.independent&&v.visit_count==35&&v.initial_passed&&v.height_passed, ...
+  'Warm baseline failed current independent J2 replay; no search launched.');
+ [~,firstTarget]=min(v.witness_times_s);
+ node=struct('q',tr.q,'actual',v,'trace',tr,'root_id',1,'root_kind',sourceLabel, ...
+  'seed_target',firstTarget,'seed_duration',v.witness_times_s(firstTarget),'attempts',0, ...
+  'zero_gain',0,'generation',0,'origin',sourceLabel,'heuristic_H',NaN);
+ warmStream=RandStream('mt19937ar','Seed',seed);
+ result1=struct('best_verified',node,'best',node,'rng_state',warmStream.State, ...
+  'stats',struct('root_count',1),'verification',v);
+ phase1=struct('cap_s',NaN,'started_s',t1,'finished_s',toc(clock),'found_complete',true, ...
+  'first_complete_search_s',NaN,'J',v.total_dv_km_s,'visits',v.visit_count,'stats',result1.stats);
+ assert(toc(clock)<deadline-o.min_phase2_s,'No time remains after warm validation.');
+else
 cap=min(o.phase1_cap_s,deadline-o.min_phase2_s-toc(clock)); assert(cap>=60,'Budget too small for phase 1.');
 c1=ctocscreen.v4.defaults(struct('seed',seed,'budget_s',cap,'stop_on_complete',1));
 t1=toc(clock); result1=ctocscreen.v4.search(fullfile(folder,'phase1_beam'),eph,c1);
@@ -49,6 +87,7 @@ phase1=struct('cap_s',cap,'started_s',t1,'finished_s',toc(clock), ...
  'found_complete',~isempty(result1.best_verified),'first_complete_search_s',result1.stats.first_complete_s, ...
  'J',NaN,'visits',result1.verification.visit_count,'stats',result1.stats);
 if phase1.found_complete, phase1.J=result1.best_verified.actual.total_dv_km_s; end
+end
 record('phase1',rmfield(phase1,'stats'));
 fprintf('PHASE1 complete=%d J=%.9f finished=%.1fs\n',phase1.found_complete,phase1.J,phase1.finished_s);
 %% Phase 2 state.
@@ -67,14 +106,14 @@ stats=struct('expansions',0,'broadenings',0,'generated',0,'admitted',0,'broaden_
 incumbent=[]; bound=Inf; improvements=zeros(0,7); boundHistory=zeros(0,2); M1=NaN;
 if phase1.found_complete
  source=result1.best_verified; bound=source.actual.total_dv_km_s; M1=numel(source.q.tau);
- incumbent=struct('q',source.q,'verification',source.actual,'node',NaN,'source','phase1_beam', ...
+ incumbent=struct('q',source.q,'verification',source.actual,'node',NaN,'source',sourceLabel, ...
   'found_s',phase1.finished_s,'from_broaden',false,'revised_from_end',NaN);
 else
  source=result1.best; % fallback: deepest partial, unbounded until a complete appears
 end
 boundHistory(end+1,:)=[toc(clock),bound];
 pb=tic; path=buildPath(source); stats.path_build_seconds=toc(pb);
-rememberRoot(nodes{path(1)}.node,path(1),'phase1_lineage');
+rememberRoot(nodes{path(1)}.node,path(1),rootLabel);
 record('phase2_start',struct('bound',bound,'path_nodes',numel(path),'burns',numel(source.q.tau)));
 %% Phase 2: incumbent-bounded backtracking (single lineage; fresh roots only after it retires).
 while toc(clock)<deadline-0.1
@@ -119,6 +158,10 @@ else
 end
 stats.source_unchanged=isequal(signature,ctocscreen.v4.signature());
 stats.experiment_source_unchanged=isequal(experimentText,cellfun(@fileread,experimentFiles,'UniformOutput',false));
+if warm
+ stats.warm_input_unchanged=strcmp(manifest.warm_input_sha256,ctocscreen.v3FileHash(o.warm_input_file));
+ assert(stats.warm_input_unchanged,'Warm input changed during search.');
+end
 assert(stats.source_unchanged&&stats.experiment_source_unchanged,'Sources changed during this experiment.');
 % Audits recomputed from the event log.
 landingAudit=zeros(size(returnCounts)); broadenLandings=[];
@@ -255,8 +298,14 @@ fprintf('STATS expansions=%d broadenings=%d admitted=%d (%.2f/exp) over_bound=%d
   fprintf('IMPROVED t=%.1f J=%.9f node=%d revised_from_end=%g broaden_lineage=%d\n', ...
    toc(clock),bound,cid,revised,nodes{cid}.from_broaden);
   if bound<c.notify_dv_km_s
-   fprintf('V4 USER_ACCEPTANCE_READY independent=35/35 raw_dv=%.12f time=%.3f\n',bound,toc(clock));
-   witness=incumbent; save(fullfile(folder,'acceptance_ready.mat'),'witness','manifest');
+   witness=incumbent;
+   if manifest.cold_start
+    fprintf('V4 USER_ACCEPTANCE_READY independent=35/35 raw_dv=%.12f time=%.3f\n',bound,toc(clock));
+    save(fullfile(folder,'acceptance_ready.mat'),'witness','manifest');
+   else
+    fprintf('V4 WARM_BELOW_8_NOT_COLD_ACCEPTANCE independent=35/35 raw_dv=%.12f time=%.3f\n',bound,toc(clock));
+    save(fullfile(folder,'warm_below_8.mat'),'witness','manifest');
+   end
   end
  end
  function r=revisedFromEnd(cid)
