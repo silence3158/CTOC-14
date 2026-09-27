@@ -41,7 +41,9 @@ for k=1:numel(samples)
  if toc(clock)>budget-20, break; end
  item=samples{k}; [a,tr]=ctocscreen.v4.replay(item.q,eph,c,false);
  assert(a.initial_passed&&a.height_passed&&~strcmp(a.status,'propagation_failure'));
- n=struct('q',tr.q,'actual',a,'trace',tr,'origin','diagnostic'); n.q.witness=a.witness_times_s;
+ n=struct('q',tr.q,'actual',a,'trace',tr,'origin','diagnostic', ...
+  'generation',numel(tr.q.tau),'attempts',0,'zero_gain',0,'heuristic_H',NaN);
+ n.q.witness=a.witness_times_s;
  nr=inspect(n,item.parent); nr.sample=item; records{end+1}=nr; %#ok<AGROW>
  fprintf('SAMPLE %d id=%d visits=%d events=%d time_ok=%d dist_ok=%d cheap_missed=%d legacy=%s trials=%d\n', ...
   k,item.id,a.visit_count,nr.counts.events,nr.counts.time_ok,nr.counts.distance_ok, ...
