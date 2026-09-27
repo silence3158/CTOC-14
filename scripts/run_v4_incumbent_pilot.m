@@ -102,7 +102,8 @@ stats=struct('expansions',0,'broadenings',0,'generated',0,'admitted',0,'broaden_
  'threshold_hits',0,'threshold_root_retirements',0,'exhausted_root_retirements',0, ...
  'deferred_resumes',0,'suppressed_deferred_paths',0,'verifications',0,'verify_failed',0, ...
  'improvements',0,'fresh_roots',0,'unique_edges',0,'virtual_edges',0,'expansion_seconds',0, ...
- 'verification_seconds',0,'dead_rollbacks',0,'complete_rollbacks',0,'path_build_seconds',0);
+ 'verification_seconds',0,'dead_rollbacks',0,'complete_rollbacks',0,'path_build_seconds',0, ...
+ 'shared_calls',0,'shared_generated',0,'shared_admitted',0,'shared_selected',0,'shared_expanded',0,'shared_seconds',0);
 incumbent=[]; bound=Inf; improvements=zeros(0,7); boundHistory=zeros(0,2); M1=NaN;
 if phase1.found_complete
  source=result1.best_verified; bound=source.actual.total_dv_km_s; M1=numel(source.q.tau);
@@ -175,19 +176,22 @@ expCount=sum(cellfun(@(n)double(n.expanded)+n.broadened,nodes));
 stats.expansion_count_checked=expCount==stats.expansions;
 stats.unique_edge_checked=sum(edgeTaken)==stats.unique_edges+stats.virtual_edges;
 assert(stats.return_count_checked&&stats.broaden_landing_checked&&stats.expansion_count_checked&&stats.unique_edge_checked);
-audit=zeros(numel(nodes),15); controls=cell(1,numel(nodes)); structures=cell(1,numel(nodes));
+audit=zeros(numel(nodes),15); controls=cell(1,numel(nodes)); structures=cell(1,numel(nodes)); origins=cell(1,numel(nodes));
 for ia=1:numel(nodes)
  na=nodes{ia}; audit(ia,:)=[ia,na.parent,numel(na.node.q.tau),na.node.actual.visit_count,na.node.actual.total_dv_km_s, ...
   na.node.q.T,na.expanded,na.broadened,numel(na.children),na.next-1,na.virtual,returnCounts(ia), ...
   na.node.root_id,na.common_prefix,na.created_s];
  controls{ia}=na.node.q; structures{ia}=visitStructure(na.node);
+ origins{ia}=na.node.origin;
 end
+stats.shared_selected=sum(edgeTaken&strcmp(origins,'shared_arc'));
+stats.shared_expanded=sum(cellfun(@(n)double(n.expanded)+n.broadened,nodes).*strcmp(origins,'shared_arc'));
 report=struct('manifest',manifest,'options',o,'phase1',phase1,'stats',stats,'final',final, ...
  'phase1_incumbent_J',phase1.J,'improvements',improvements, ...
  'improvement_columns',{{'t_s','J','node','from_broaden','root','revised_from_end','burns'}}, ...
  'bound_history',boundHistory,'tree_audit',audit, ...
  'tree_columns',{{'id','parent','burns','visits','dv','T','expanded','broadened','children','taken','virtual','landings','root','common_prefix','created_s'}}, ...
- 'root_records',{rootRecords},'snapshots',{snapshots},'node_controls',{controls},'visit_structures',{structures}, ...
+ 'root_records',{rootRecords},'snapshots',{snapshots},'node_controls',{controls},'visit_structures',{structures},'node_origins',{origins}, ...
  'events',{events},'stopped_nodes',find(stopped),'suppressed_paths',{suppressedPaths},'rng_state',stream.State);
 report.stats.total_seconds=toc(clock); report.stats.within_budget=report.stats.total_seconds<=budget;
 save(fullfile(folder,'report.mat'),'report');
@@ -245,6 +249,8 @@ fprintf('STATS expansions=%d broadenings=%d admitted=%d (%.2f/exp) over_bound=%d
   stats.generated=stats.generated+numel(kids); stats.budget_filtered=stats.budget_filtered+er.budget_filtered;
   stats.excluded=stats.excluded+er.excluded; stats.guided=stats.guided+er.guided;
   stats.guidance_failures=stats.guidance_failures+er.failed_guidance;
+  stats.shared_calls=stats.shared_calls+er.shared_calls; stats.shared_generated=stats.shared_generated+er.shared_children;
+  stats.shared_seconds=stats.shared_seconds+er.shared_seconds;
   rec.tried=[rec.tried;er.tried]; lineage=broaden||rec.from_broaden;
   childIds=zeros(1,0); scores=zeros(0,2); overBound=0; completes=0;
   for jk=1:numel(kids)
@@ -257,6 +263,7 @@ fprintf('STATS expansions=%d broadenings=%d admitted=%d (%.2f/exp) over_bound=%d
     continue
    end
    cid=addNode(kid,id,lineage); childIds(end+1)=cid; %#ok<AGROW>
+   if strcmp(kid.origin,'shared_arc'), stats.shared_admitted=stats.shared_admitted+1; end
    % Scalar first: inside [ ], a continued line starting with " +x" would
    % become a separate element (the ordering bug found in run_v4_bound4_pilot).
    f=J+kid.actual.inclination_penalty+c.time_weight*35*max(0,kid.q.T/864000-kid.actual.visit_count/35);
@@ -275,7 +282,8 @@ fprintf('STATS expansions=%d broadenings=%d admitted=%d (%.2f/exp) over_bound=%d
    'burns',numel(rec.node.q.tau),'visits',rec.node.actual.visit_count,'dv',rec.node.actual.total_dv_km_s, ...
    'bound',bound,'max_leg_dv',eo.max_leg_dv,'generated',numel(kids),'admitted',numel(childIds), ...
    'over_bound',overBound,'budget_filtered',er.budget_filtered,'excluded',er.excluded,'guided',er.guided, ...
-   'guidance_failures',er.failed_guidance,'completes',completes,'seconds',er.seconds));
+   'guidance_failures',er.failed_guidance,'completes',completes,'seconds',er.seconds, ...
+   'shared_calls',er.shared_calls,'shared_generated',er.shared_children,'shared_reports',{er.shared_reports}));
  end
  function checkComplete(cid)
   n=nodes{cid}.node; J=n.actual.total_dv_km_s;
@@ -425,4 +433,5 @@ M=numel(p.tau);
 assert(numel(q.tau)>=M,'Physical prefix changed.');
 assert(isequal(p.x0,q.x0)&&isequal(p.tau(:),reshape(q.tau(1:M),[],1))&&isequal(p.u,q.u(1:M,:)), ...
  'Physical prefix changed.');
+assert(all(q.tau(M+1:end)>=p.T),'New impulse crossed the parent endpoint.');
 end

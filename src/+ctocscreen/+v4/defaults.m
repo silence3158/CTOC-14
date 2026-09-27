@@ -25,6 +25,7 @@ c=struct('seed',888,'budget_s',300,'root_count',4,'beam_width',16, ...
  'layer_diversity',0.5,'parent_cost_weight',0.1,'time_price_km_s',0.3,'time_reserve',0.1,'no_event_cost_km_s',2,'estimate_seconds',1,'min_leg_s',10800, ...
  'absorb_miss_km',2000,'absorb_residual_km',1,'absorb_max_extra_km_s',0.3,'absorb_candidates',3, ...
  'absorb_burns',2,'absorb_seconds',5,'absorb_newton_iterations',12,'absorb_newton_km',0.1,'tail_iterations',48,'tail_burns',4,'tail_seconds',6, ...
+ 'shared_enabled',1,'shared_fraction',0.35,'shared_refine_candidates',4,'shared_children',2,'shared_rcond_min',1e-12,'shared_seed_margin',0.3, ...
  'b_share',0.3,'heuristic_kind',1,'stop_on_complete',0,'root_service_every',6,'beam_layers',8,'per_layer',3,'root_keep',4);
 if nargin>0
  names=fieldnames(overrides);
@@ -46,6 +47,9 @@ assert(c.model_radius_km>0&&c.model_radius_km<c.search_radius_km);
 assert(c.model_height_margin_km>c.height_margin_km&&c.sma_margin_km>0&&c.sma_margin_km<10);
 assert(c.rebase_limit>=1&&c.rebase_gap_km>0&&c.rebase_gap_km<c.search_radius_km-c.model_radius_km);
 assert(c.shared_attempts>=1&&c.shared_attempts==round(c.shared_attempts));
+assert(ismember(c.shared_enabled,[0 1])&&c.shared_fraction>0&&c.shared_fraction<1);
+assert(c.shared_refine_candidates>=2&&c.shared_refine_candidates==round(c.shared_refine_candidates));
+assert(c.shared_children>=1&&c.shared_children==round(c.shared_children)&&c.shared_rcond_min>0);
 assert(c.search_max_dv_km_s==6.1&&c.notify_dv_km_s==8);
 assert(c.eccentricity_limit<.001&&c.exploration>0&&c.exploration<1);
 assert(numel(c.scope_seconds)==3&&all(c.scope_seconds>0));

@@ -9,7 +9,7 @@ manifest=struct('config',c,'signature',signature,'target_signature',eph.signatur
 save(fullfile(folder,'manifest.mat'),'manifest');
 fid=fopen(fullfile(folder,'events.jsonl'),'w','n','UTF-8'); assert(fid>0); cleanup=onCleanup(@()fclose(fid)); %#ok<NASGU>
 events={}; joints={}; warm={}; pending={}; best=[]; bestComplete=[]; bestVerified=[]; verifiedKeys={};
-checkpoint=[]; checkpointElapsed=NaN; checkpointReport=[]; absorbTabu={}; tailDone={};
+checkpoint=[]; checkpointElapsed=NaN; checkpointReport=[]; tailDone={};
 nextRoot=1; rootServices=zeros(1,16); stats=struct('rounds',0,'root_count',0,'expanded',0,'generated',0, ...
  'shared_calls',0,'full_calls',0,'structure_calls',0,'resume_calls',0,'joint_iterations',0, ...
  'actual_joint_improvements',0,'suffix_rebuilds',0,'independent_checks',0,'complete_found',0, ...
@@ -56,21 +56,14 @@ while toc(clock)<deadline&&~stopNow()
  else
   [children,ar,memory]=ctocscreen.v4.expand(parent,eph,c,stream,memory,min(c.action_seconds,deadline-toc(clock)));
   stats.expanded=stats.expanded+1; stats.expansion_seconds=stats.expansion_seconds+ar.seconds;
+  stats.absorb_calls=stats.absorb_calls+ar.shared_calls; stats.absorbed=stats.absorbed+ar.shared_children;
+  bSeconds=bSeconds+ar.shared_seconds;
   record('expand',struct('root_id',parent.root_id,'parent_visits',parent.actual.visit_count,'report',ar));
  end
  stats.generated=stats.generated+numel(children);
  for j=1:numel(children), consider(children{j}); end
  if stopNow(), break; end
- % Step 3: fold a following encounter into the newest burn (one burn, two targets).
- transfer=cellfun(@(n)any(strcmp(n.origin,{'crossing_transfer','delayed_impulse','absorbed_encounter'})),children);
- for j=find(transfer)
-  if toc(clock)>=deadline, break; end
-  bt=tic; [child,rr]=ctocscreen.v4.absorb(children{j},eph,c,min(c.absorb_seconds,deadline-toc(clock)),absorbTabu);
-  bSeconds=bSeconds+toc(bt); stats.absorb_calls=stats.absorb_calls+1;
-  absorbTabu{end+1}=sprintf('%s|%d',ctocscreen.v4.controlKey(children{j}.q),rr.target); %#ok<AGROW>
-  if ~isempty(child), stats.absorbed=stats.absorbed+1; children{end+1}=child; consider(child); end %#ok<AGROW>
-  record('absorb',rmfield(rr,'joint'));
- end
+ % Shared arcs are generated inside expand for both beam and backtracking.
  % Step 2: tail B on the cheapest deep candidate while B stays under its share.
  if bSeconds<c.b_share*toc(clock)&&toc(clock)<deadline
   pool=[beam,children]; deep=cellfun(@(n)numel(n.q.tau)>=2&&n.actual.visit_count>=2,pool);
