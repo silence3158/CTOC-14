@@ -14,7 +14,7 @@ nextRoot=1; rootServices=zeros(1,16); stats=struct('rounds',0,'root_count',0,'ex
  'shared_calls',0,'full_calls',0,'structure_calls',0,'resume_calls',0,'joint_iterations',0, ...
  'actual_joint_improvements',0,'suffix_rebuilds',0,'independent_checks',0,'complete_found',0, ...
  'first_complete_s',NaN,'first_complete_dv_km_s',NaN,'notification',false, ...
- 'expansion_seconds',0,'joint_seconds',0,'estimate_calls',0,'estimate_seconds',0,'absorb_calls',0,'absorbed',0,'tail_calls',0,'b_seconds',0,'verification_seconds',0,'source_unchanged',false);
+ 'expansion_seconds',0,'joint_seconds',0,'estimate_calls',0,'estimate_seconds',0,'absorb_calls',0,'absorbed',0,'tail_calls',0,'b_seconds',0,'verification_seconds',0,'source_unchanged',false,'stopped_on_complete',false);
 try
 for k=1:c.root_count
  node=ctocscreen.v4.root(nextRoot,eph,c,stream); nextRoot=nextRoot+1;
@@ -27,7 +27,9 @@ record('start',struct('cold_start',true,'budget_s',c.budget_s,'seed',c.seed));
 % (E3: early-control steps are amplified 1e4-1e9 on long chains). Tail B and
 % encounter absorption act only on the last burns.
 bSeconds=0;
-while toc(clock)<deadline
+% stop_on_complete ends the search at its first independently verified
+% complete solution (used as phase 1 of a separate experiment entry).
+while toc(clock)<deadline&&~stopNow()
  stats.rounds=stats.rounds+1; iteration=stats.rounds;
  if isempty(beam)||mod(iteration,c.root_every)==0
   node=ctocscreen.v4.root(nextRoot,eph,c,stream); nextRoot=nextRoot+1;
@@ -58,6 +60,7 @@ while toc(clock)<deadline
  end
  stats.generated=stats.generated+numel(children);
  for j=1:numel(children), consider(children{j}); end
+ if stopNow(), break; end
  % Step 3: fold a following encounter into the newest burn (one burn, two targets).
  transfer=cellfun(@(n)any(strcmp(n.origin,{'crossing_transfer','delayed_impulse','absorbed_encounter'})),children);
  for j=find(transfer)
@@ -100,7 +103,7 @@ while toc(clock)<deadline
  record('round',struct('round',iteration,'best_visits',best.actual.visit_count, ...
   'best_dv',best.actual.total_dv_km_s,'beam_size',numel(beam)));
 end
-stats.search_seconds=toc(clock);
+stats.search_seconds=toc(clock); stats.stopped_on_complete=stopNow();
 chosen=best; if ~isempty(bestComplete), chosen=bestComplete; end
 if ~isempty(bestVerified), chosen=bestVerified; end
 if ~isempty(bestVerified)&&strcmp(ctocscreen.v4.controlKey(chosen.q),ctocscreen.v4.controlKey(bestVerified.q))
@@ -176,6 +179,9 @@ end
    stats.actual_joint_improvements=stats.actual_joint_improvements+1;
   end
   record('joint',jr);
+ end
+ function yes=stopNow()
+  yes=c.stop_on_complete>0&&~isempty(bestVerified);
  end
  function value=estimateOf(n)
   value=0; if isfield(n,'heuristic_H')&&~isnan(n.heuristic_H), value=n.heuristic_H; end

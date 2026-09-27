@@ -1,12 +1,23 @@
-function [children,report,memory]=expand(parent,eph,c,stream,memory,budget)
+function [children,report,memory]=expand(parent,eph,c,stream,memory,budget,options)
 %EXPAND Children of the current real trajectory (A layer).
 % Main source: timed Lambert transfers to target plane-crossing events
 % (events.m, crossing.m). Old any-time grid proposals keep a minority share
 % for diversity. All children are J2-corrected and replayed with fixed controls.
+% Optional options (defaults keep the original behavior):
+%  max_leg_dv       proposals whose two-body leg cost exceeds it are dropped
+%                   before J2 guidance (branch-and-bound successor test with a
+%                   predicted edge cost; the replayed child is still re-checked)
+%  exclude          rows [target arrival_s] already tried at this node; same
+%                   target within exclude_window_s counts as the same encounter
+if nargin<7||isempty(options), options=struct(); end
+maxLeg=Inf; if isfield(options,'max_leg_dv'), maxLeg=options.max_leg_dv; end
+tried=zeros(0,2); if isfield(options,'exclude'), tried=options.exclude; end
+window=600; if isfield(options,'exclude_window_s'), window=options.exclude_window_s; end
 clock=tic; children={}; m=eph.model; q=parent.q; t0=q.T;
 remaining=find(parent.actual.distance_km>1); report=struct('enumerated',0,'guided',0, ...
  'children',0,'seconds',0,'coast_children',0,'failed_guidance',0,'errors',{{}}, ...
- 'crossing_events',0,'crossing_proposals',0,'grid_proposals',0,'heuristic_H',NaN,'crossing_children',0);
+ 'crossing_events',0,'crossing_proposals',0,'grid_proposals',0,'heuristic_H',NaN,'crossing_children',0, ...
+ 'budget_filtered',0,'excluded',0,'tried',zeros(0,2));
 if isempty(remaining)||t0>=m.horizon_s, return; end
 [ev,info]=ctocscreen.v4.events(parent,eph,c);
 report.crossing_events=numel(ev); report.heuristic_H=info.H;
@@ -16,6 +27,15 @@ if rand(stream)<c.grid_share&&toc(clock)<.6*budget
  grid=gridSeeds(parent,eph,c,stream,remaining,.6*budget-toc(clock));
  report.grid_proposals=numel(grid); report.enumerated=numel(grid);
  seeds=[seeds,grid];
+end
+if ~isempty(seeds)
+ keep=[seeds.dv]<=maxLeg; report.budget_filtered=sum(~keep);
+ for k=find(keep)
+  if any(tried(:,1)==seeds(k).target&abs(tried(:,2)-seeds(k).arrival)<window)
+   keep(k)=false; report.excluded=report.excluded+1;
+  end
+ end
+ seeds=seeds(keep);
 end
 if ~isempty(seeds)
  % Sampling after spec eq. (30) with neutral pheromone: weight ~ eta^beta,
@@ -30,7 +50,7 @@ if ~isempty(seeds)
   prob(k)=0; seed=seeds(k); signature=[seed.target,round(seed.arrival)];
   if ~isempty(used)&&ismember(signature,used,'rows'), continue; end
   used(end+1,:)=signature; %#ok<AGROW>
-  report.guided=report.guided+1;
+  report.guided=report.guided+1; report.tried(end+1,:)=[seed.target,seed.arrival];
   gc=ctocscreen.v3Defaults(struct('budget_s',max(.02,budget-toc(clock)), ...
    'guided_branches',1,'guided_max_revolutions',c.max_revolutions,'search_radius_km',c.search_radius_km));
   gc.shooting_reltol=c.shooting_reltol; gc.verify_reltol=c.verify_reltol; gc.max_step_s=c.max_step_s;
