@@ -16,7 +16,7 @@ samples={}; old=load(fullfile(sim,files{1})); Q=old.report.q;
 q=Q; q.tau=Q.tau(1:2); q.u=Q.u(1:2,:); q.T=Q.tau(3); q.witness(q.witness>q.T)=NaN;
 p=Q; p.tau=Q.tau(1); p.u=Q.u(1,:); p.T=Q.tau(2); p.witness(p.witness>p.T)=NaN;
 samples{1}=struct('source',files{1},'id',2,'kind','known_positive_control','q',q,'parent',p);
-levels=[12 20 28 32];
+levels=[16 20 28 32];
 for f=2:3
  z=load(fullfile(sim,files{f})); r=z.report; a=r.tree_audit;
  for level=levels
