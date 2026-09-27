@@ -4,7 +4,7 @@
 
 2026-09-27 思路备忘：[成本阈值、完整试走与逐级回溯](V4_COST_BOUND_BACKTRACKING_20260927.md)。用户认可方向并要求归档；是 V4 内的后续求解组织方案，不改变正式物理模型，不代表已接入或恢复搜索。单例依据见 [最小历史回溯诊断](V4_BACKTRACK_DIAGNOSTIC_20260927.md)。
 
-状态：核心思想、A+B 协同主线及 B 的范围补全已由用户确认；首版代码和首轮开发实验已完成，随后修复确定性缺陷与接纳余量（见 [V4_DETERMINISTIC_REPAIR_20260926.md](V4_DETERMINISTIC_REPAIR_20260926.md)，修后 300 秒冷启动 25/35、30.42 km/s）；随后 A 层改为穿越点主干并调整调度，三种子 300 秒冷启动均独立 35/35（17.91–24.88 km/s，见 [V4_THREE_STEPS_20260926.md](V4_THREE_STEPS_20260926.md)），仍未达 8 km/s。代码位于 `src/+ctocscreen/+v4/`，实施过程见 [V4_FIRST_IMPLEMENTATION_20260926.md](V4_FIRST_IMPLEMENTATION_20260926.md)，验收分析见 [V4_FIRST_EXPERIMENT_REVIEW_20260926.md](V4_FIRST_EXPERIMENT_REVIEW_20260926.md)。最新 600 秒冷启动仅 34/35 独立通过，原始 ΔV 91.241826768146 km/s，没有完整合格成绩；已按用户要求暂停。下文模型规格不等于所有能力已经实测成功。
+状态：核心思想、A+B 协同主线及 B 的范围补全已由用户确认；首版代码和首轮开发实验已完成，随后修复确定性缺陷与接纳余量（见 [V4_DETERMINISTIC_REPAIR_20260926.md](V4_DETERMINISTIC_REPAIR_20260926.md)，修后 300 秒冷启动 25/35、30.42 km/s）；随后 A 层改为穿越点主干并调整调度，三种子 300 秒冷启动均独立 35/35（17.91–24.88 km/s，见 [V4_THREE_STEPS_20260926.md](V4_THREE_STEPS_20260926.md)），仍未达 8 km/s；之后的现任解定界回溯最小验证在 seed 888、300 秒得到 18.61 km/s（见 [V4_INCUMBENT_BACKTRACK_20260927.md](V4_INCUMBENT_BACKTRACK_20260927.md)）。代码位于 `src/+ctocscreen/+v4/`，实施过程见 [V4_FIRST_IMPLEMENTATION_20260926.md](V4_FIRST_IMPLEMENTATION_20260926.md)，验收分析见 [V4_FIRST_EXPERIMENT_REVIEW_20260926.md](V4_FIRST_EXPERIMENT_REVIEW_20260926.md)。最新 600 秒冷启动仅 34/35 独立通过，原始 ΔV 91.241826768146 km/s，没有完整合格成绩；已按用户要求暂停。下文模型规格不等于所有能力已经实测成功。
 
 阅读口径：第 1 至 3 节是模型，第 4 节区分正式条件与当前搜索政策，第 5 节是已选架构，第 6 节是待决定细节。V3 的历史首版机制清单和阶段评审措辞不自动成为 V4 的算法要求；物理条件、冷启动及最终独立验收要求继续有效。变更说明见 [V4_MODEL_CONSISTENCY_20260926.md](V4_MODEL_CONSISTENCY_20260926.md)。
 
