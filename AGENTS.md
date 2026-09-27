@@ -1,5 +1,10 @@
 # CTOC14 项目必须遵守的约定
 
+## V4 共享自然弧使用不足分析（2026-09-27，用户最新指示）
+
+- 用户要求分析“一次机动后沿同一自然弧连续访问多个目标”使用不足、回溯阶段未启动 absorb 的问题，不启动实验。见 [docs/V4_MULTI_TARGET_ARC_ANALYSIS_20260927.md](docs/V4_MULTI_TARGET_ARC_ANALYSIS_20260927.md)。
+- 实测：三次定界回溯运行共 17741 条新边，无一次增加 ≥2 访问；absorb 只在第一阶段 search.m 调用，617 次成功 12 次，86% 在 2000 km 候选门槛处结束。回溯入口 `run_v4_incumbent_pilot.m` 未接入 absorb。改进方向已列出，未实施，等待用户决定。
+
 ## V4 队友热启动 20 分钟（2026-09-27，用户最新指示）
 
 - 用户明确要求完成 30 分钟实验后，用队友 9.98 成绩做一次 1200 s 热启动。此授权覆盖本次历史输入及长测，使用纠正多圈后的 `runs/v3/diagnostics/tail27_20260925_method_search/comparison.mat` 固定控制，默认冷启动要求不变。见 docs/V4_TEAMMATE_WARM_1200S_20260927.md。
