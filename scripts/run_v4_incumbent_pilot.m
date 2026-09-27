@@ -17,7 +17,7 @@ if nargin<3||isempty(seed), seed=888; end
 if nargin<4||isempty(options), options=struct(); end
 o=struct('phase1_cap_s',200,'broaden_at',2,'return_limit',4,'depth',4,'margin_km_s',0.1, ...
  'reserve_s',18,'epsilon_km_s',1e-6,'min_phase2_s',30,'exclude_window_s',600);
-names=fieldnames(options); assert(all(isfield(o,names)),'ctocscreen:v4:option','Unknown option.');
+names=fieldnames(options); assert(isempty(names)||all(isfield(o,names)),'ctocscreen:v4:option','Unknown option.');
 for kn=1:numel(names), o.(names{kn})=options.(names{kn}); end
 validateattributes(budget,{'double'},{'scalar','finite','positive'});
 validateattributes(seed,{'double'},{'scalar','finite','integer','>=',0,'<=',2^32-1});
