@@ -56,6 +56,7 @@ stream=RandStream('mt19937ar','Seed',seed); stream.State=result1.rng_state; memo
 nodes={}; seen=containers.Map('KeyType','char','ValueType','logical');
 edgeTaken=false(1,0); returnCounts=zeros(1,0); stopped=false(1,0);
 path=[]; deferred={}; suppressedPaths={}; rootIndex=result1.stats.root_count;
+rootRecords={}; snapshots={}; snapshotLimits=[300 600 1200]; snapshotNext=1;
 stats=struct('expansions',0,'broadenings',0,'generated',0,'admitted',0,'broaden_admitted',0, ...
  'over_bound',0,'duplicates',0,'budget_filtered',0,'excluded',0,'guided',0,'guidance_failures',0, ...
  'bound_skipped',0,'backtracks',0,'four_burn_backtracks',0,'short_backtracks',0, ...
@@ -73,12 +74,17 @@ else
 end
 boundHistory(end+1,:)=[toc(clock),bound];
 pb=tic; path=buildPath(source); stats.path_build_seconds=toc(pb);
+rememberRoot(nodes{path(1)}.node,path(1),'phase1_lineage');
 record('phase2_start',struct('bound',bound,'path_nodes',numel(path),'burns',numel(source.q.tau)));
 %% Phase 2: incumbent-bounded backtracking (single lineage; fresh roots only after it retires).
 while toc(clock)<deadline-0.1
+ if budget>300&&snapshotNext<=numel(snapshotLimits)&&toc(clock)>=snapshotLimits(snapshotNext)
+  saveSnapshot(snapshotLimits(snapshotNext),false); snapshotNext=snapshotNext+1;
+ end
  if isempty(path)
   rootIndex=rootIndex+1; stats.fresh_roots=stats.fresh_roots+1;
   node=ctocscreen.v4.root(rootIndex,eph,c,stream); id=addNode(node,0,false); path=id;
+  rememberRoot(node,id,'fresh_phase2');
   record('root',struct('node',id,'root',rootIndex,'kind',node.root_kind,'bound',bound));
  end
  id=path(end); rec=nodes{id}; assert(~any(stopped(path)),'Stopped subtree reentered.');
@@ -102,6 +108,7 @@ while toc(clock)<deadline-0.1
  if ~taken, rollback(); end
 end
 stats.phase2_end_s=toc(clock);
+if budget>300, saveSnapshot(budget,true); end
 %% Final result: the incumbent carries its own independent verification.
 if isempty(incumbent)
  [~,jb]=max(cellfun(@(n)n.node.actual.visit_count-1e-3*n.node.actual.total_dv_km_s,nodes));
@@ -125,16 +132,19 @@ expCount=sum(cellfun(@(n)double(n.expanded)+n.broadened,nodes));
 stats.expansion_count_checked=expCount==stats.expansions;
 stats.unique_edge_checked=sum(edgeTaken)==stats.unique_edges+stats.virtual_edges;
 assert(stats.return_count_checked&&stats.broaden_landing_checked&&stats.expansion_count_checked&&stats.unique_edge_checked);
-audit=zeros(numel(nodes),12);
+audit=zeros(numel(nodes),15); controls=cell(1,numel(nodes)); structures=cell(1,numel(nodes));
 for ia=1:numel(nodes)
  na=nodes{ia}; audit(ia,:)=[ia,na.parent,numel(na.node.q.tau),na.node.actual.visit_count,na.node.actual.total_dv_km_s, ...
-  na.node.q.T,na.expanded,na.broadened,numel(na.children),na.next-1,na.virtual,returnCounts(ia)];
+  na.node.q.T,na.expanded,na.broadened,numel(na.children),na.next-1,na.virtual,returnCounts(ia), ...
+  na.node.root_id,na.common_prefix,na.created_s];
+ controls{ia}=na.node.q; structures{ia}=visitStructure(na.node);
 end
 report=struct('manifest',manifest,'options',o,'phase1',phase1,'stats',stats,'final',final, ...
  'phase1_incumbent_J',phase1.J,'improvements',improvements, ...
  'improvement_columns',{{'t_s','J','node','from_broaden','root','revised_from_end','burns'}}, ...
  'bound_history',boundHistory,'tree_audit',audit, ...
- 'tree_columns',{{'id','parent','burns','visits','dv','T','expanded','broadened','children','taken','virtual','landings'}}, ...
+ 'tree_columns',{{'id','parent','burns','visits','dv','T','expanded','broadened','children','taken','virtual','landings','root','common_prefix','created_s'}}, ...
+ 'root_records',{rootRecords},'snapshots',{snapshots},'node_controls',{controls},'visit_structures',{structures}, ...
  'events',{events},'stopped_nodes',find(stopped),'suppressed_paths',{suppressedPaths},'rng_state',stream.State);
 report.stats.total_seconds=toc(clock); report.stats.within_budget=report.stats.total_seconds<=budget;
 save(fullfile(folder,'report.mat'),'report');
@@ -217,7 +227,8 @@ fprintf('STATS expansions=%d broadenings=%d admitted=%d (%.2f/exp) over_bound=%d
    stats.broadenings=stats.broadenings+1; stats.broaden_admitted=stats.broaden_admitted+numel(childIds);
   end
   landings=returnCounts(id); rec.expanded=true; nodes{id}=rec;
-  record('expand',struct('node',id,'broaden',broaden,'landings',landings,'virtual',rec.virtual, ...
+  record('expand',struct('node',id,'root',rec.node.root_id,'common_prefix',rec.common_prefix, ...
+   'broaden',broaden,'landings',landings,'virtual',rec.virtual, ...
    'burns',numel(rec.node.q.tau),'visits',rec.node.actual.visit_count,'dv',rec.node.actual.total_dv_km_s, ...
    'bound',bound,'max_leg_dv',eo.max_leg_dv,'generated',numel(kids),'admitted',numel(childIds), ...
    'over_bound',overBound,'budget_filtered',er.budget_filtered,'excluded',er.excluded,'guided',er.guided, ...
@@ -238,6 +249,7 @@ fprintf('STATS expansions=%d broadenings=%d admitted=%d (%.2f/exp) over_bound=%d
    'from_broaden',nodes{cid}.from_broaden,'revised_from_end',revised);
   bound=v.total_dv_km_s; boundHistory(end+1,:)=[toc(clock),bound]; stats.improvements=stats.improvements+1;
   improvements(end+1,:)=[toc(clock),bound,cid,nodes{cid}.from_broaden,n.root_id,revised,numel(n.q.tau)];
+  improved=incumbent; save(fullfile(folder,sprintf('improvement_%03d.mat',stats.improvements)),'improved');
   record('improvement',struct('node',cid,'dv',bound,'from_broaden',nodes{cid}.from_broaden, ...
    'revised_from_end',revised,'burns',numel(n.q.tau)));
   fprintf('IMPROVED t=%.1f J=%.9f node=%d revised_from_end=%g broaden_lineage=%d\n', ...
@@ -307,8 +319,48 @@ fprintf('STATS expansions=%d broadenings=%d admitted=%d (%.2f/exp) over_bound=%d
   id=numel(nodes)+1;
   nodes{id}=struct('node',node,'parent',parent,'expanded',false,'children',zeros(1,0),'next',1, ...
    'broaden_pending',false,'broadened',0,'from_broaden',fromBroaden,'tried',zeros(0,2), ...
-   'verify_failed',false,'virtual',false);
+   'verify_failed',false,'virtual',false,'common_prefix',commonPrefix(node.q),'created_s',toc(clock));
   edgeTaken(id)=false; seen(ctocscreen.v4.controlKey(node.q))=true; returnCounts(id)=0; stopped(id)=false;
+ end
+ function n=commonPrefix(q)
+  % Exact shared controls with this run's phase-1 source; -1 means new x0.
+  n=-1; if ~isequal(q.x0,source.q.x0), return; end
+  n=0;
+  for j=1:min(numel(q.tau),numel(source.q.tau))
+   if q.tau(j)~=source.q.tau(j)||~isequal(q.u(j,:),source.q.u(j,:)), break; end
+   n=j;
+  end
+ end
+ function s=visitStructure(node)
+  ids=find(node.actual.distance_km<=1); times=node.actual.witness_times_s(ids);
+  [times,order]=sort(times); ids=ids(order); arcs=zeros(size(ids));
+  for j=1:numel(ids), arcs(j)=sum(node.q.tau<times(j)); end
+  s=struct('ids',ids,'times',times,'arcs',arcs);
+ end
+ function rememberRoot(node,id,origin)
+  entry=struct('node',id,'root',node.root_id,'kind',node.root_kind,'origin',origin, ...
+   'x0',node.q.x0,'initial_orbit',node.actual.initial_orbit,'created_s',nodes{id}.created_s);
+  rootRecords{end+1}=entry; record('root_detail',entry);
+ end
+ function saveSnapshot(limit,isFinal)
+  counts=zeros(numel(rootRecords),7);
+  for j=1:numel(rootRecords)
+   ids=find(cellfun(@(n)n.node.root_id==rootRecords{j}.root,nodes));
+   active=ids(cellfun(@(n)n.expanded,nodes(ids)));
+   minPrefix=NaN; if ~isempty(active), minPrefix=min(cellfun(@(n)n.common_prefix,nodes(active))); end
+   counts(j,:)=[rootRecords{j}.root,numel(ids),numel(active), ...
+    sum(cellfun(@(n)n.broadened,nodes(ids))), ...
+    max(cellfun(@(n)n.node.actual.visit_count,nodes(ids))),minPrefix,returnCounts(rootRecords{j}.node)];
+  end
+  snapshot=struct('limit_s',limit,'actual_s',toc(clock),'final',isFinal, ...
+   'incumbent',incumbent,'stats',stats,'roots',{rootRecords},'root_summary',counts, ...
+   'root_columns',{{'root','nodes','expanded_nodes','broadenings','max_screened_visits','min_shared_prefix','root_returns'}});
+  snapshots{end+1}=snapshot;
+  save(fullfile(folder,sprintf('snapshot_%04d.mat',limit)),'snapshot');
+  record('snapshot',struct('limit_s',limit,'actual_s',snapshot.actual_s,'bound',bound, ...
+   'fresh_roots',stats.fresh_roots,'expansions',stats.expansions,'final',isFinal));
+  fprintf('SNAPSHOT limit=%d actual=%.2f J=%.9f fresh_roots=%d expansions=%d\n', ...
+   limit,snapshot.actual_s,bound,stats.fresh_roots,stats.expansions);
  end
  function suppress(saved)
   suppressedPaths{end+1}=saved; stats.suppressed_deferred_paths=stats.suppressed_deferred_paths+1;
