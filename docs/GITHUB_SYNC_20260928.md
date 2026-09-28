@@ -23,7 +23,9 @@
 
 ## 以后怎么推送
 
-工作目录仍为 `D:/CTOC-14/simulation`，日常使用 main，通过 origin 推送至 `git@github.com:silence3158/CTOC-14.git`。SSH 解锁后正常执行 `git push` 即可（最终连接状态在收尾检查确认）。
+工作目录仍为 `D:/CTOC-14/simulation`，日常使用 main，通过 origin 推送至 `git@github.com:silence3158/CTOC-14.git`。SSH 解锁、main 跟踪 origin/main 后，正常执行 `git push` 即可。
+
+首次历史推送已成功创建远程 main，接收提交 `fb2eb026b242895a60f89599b2e3abe871d50c9e`。GitHub 对另外五个约 92–99 MiB 的历史实验文件给出超过建议 50 MiB 的提示，但已接受；这些文件不在用户本次指定的排除范围内，未擅自删除。最终同步检查与诊断补充保存在 `D:/CTOC-14/git-backups/github-push-diagnosis-20260928.txt`。
 
 旧归档分支和旧标签会重新引入被排除的大文件，因此保留在本地，不执行 `git push --all`、`git push --mirror` 或批量推送旧标签，也不要把旧归档分支合并回 main。未来需要迁移某个旧改动时，应只迁移具体改动。现有 `.gitignore` 已忽略 runs 目录。
 
