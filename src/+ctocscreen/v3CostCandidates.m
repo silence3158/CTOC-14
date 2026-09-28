@@ -18,6 +18,16 @@ timeLeft=eph.model.horizon_s-node.t; slot=timeLeft/numel(ids);
 look=min(timeLeft,c.cost_lookahead_s);
 dtgrid=unique(min(look,[1800 3600 7200 c.cost_time_budget_factor*slot ...
  linspace(max(1800,.15*slot),look,c.cost_time_samples)]));
+% Far-field phasing: cheap legs often need a long coast, but widening the whole
+% lookahead makes every enumeration expensive. Instead keep the near field dense
+% and add a few coarse far-field times, letting the task-time pressure term
+% (v3LambertScore) reject the ones that would not leave time for the remaining
+% targets. This is a proposal grid, not a time limit.
+if c.far_field_samples>0
+ farHorizon=min(timeLeft,max(look,c.far_field_horizon_s));
+ farTimes=min(timeLeft,max(1800,farHorizon*(1:c.far_field_samples)/(c.far_field_samples+1)));
+ dtgrid=unique([dtgrid(:);farTimes(:)]);
+end
 grid=linspace(node.t,node.t+look,max(3,ceil(look/1200)+1));
 positions=ctocscreen.v3QueryTargets(eph,ids,grid,'grid');
 natural=[];
@@ -61,6 +71,12 @@ for k=1:numel(ids)
   ts=[ts node.seed_duration_s];
  end
  ts=unique(ts(ts>=c.action_min_duration_s&ts<=look));
+ % Far-field times were sampled outside the near lookahead; keep them as long as
+ % they stay inside the mission horizon.
+ if c.far_field_samples>0
+  ts=unique([ts(:);min(timeLeft,dtgrid(dtgrid>look))]);
+  ts=ts(ts>=c.action_min_duration_s);
+ end
  % Cover middle/long times before the short-time tail if the stage expires.
  indices=unique([ceil(numel(ts)/2),numel(ts),1,ceil(numel(ts)/4),ceil(3*numel(ts)/4),1:numel(ts)],'stable');
  indices=indices(indices>=1&indices<=numel(ts)); ts=ts(indices);

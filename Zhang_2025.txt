@@ -1,0 +1,2423 @@
+                                                Global Optimality in Multi-Flyby Asteroid Trajectory
+                                                 Optimization: Theory and Application Techniques
+
+                                                                                        Zhong Zhang∗
+                                           Tsinghua University, 100084 Beĳing, People’s Republic of China; Politecnico di Milano, 20156 Milan, Italy
+
+                                                                                           Xiang Guo †
+                                                     National University of Defense Technology, 410073 Changsha, People’s Republic of China
+
+                                                                                                Di Wu‡
+arXiv:2508.02904v1 [math.OC] 4 Aug 2025
+
+
+
+
+                                                                    Beihang University, Beĳing, 100191, People’s Republic of China
+
+                                                                                    Hexi Baoyin§ and Junfeng Li¶
+                                                                    Tsinghua University, 100084 Beĳing, People’s Republic of China
+
+                                                                                             Francesco Topputo‖
+                                                                                  Politecnico di Milano, 20156 Milan, Italy
+
+
+                                                    Designing optimal trajectories for multi-flyby asteroid missions is scientifically critical but
+
+                                                technically challenging due to nonlinear dynamics, intermediate constraints, and numerous
+
+                                                local optima. This paper establishes a method that approaches global optimality for multi-flyby
+
+                                                trajectory optimization under a given sequence. The original optimal control problem with
+
+                                                interior-point equality constraints is transformed into a multi-stage decision formulation.
+
+                                                This reformulation enables direct application of dynamic programming in lower dimensions,
+
+                                                and follows Bellman’s principle of optimality. Moreover, the method provides a quantifiable
+
+                                                bound on global optima errors introduced by discretization and approximation assumptions,
+
+                                                thus ensuring a measure of confidence in the obtained solution. The method accommodates
+
+                                                both impulsive and low-thrust maneuver schemes in rendezvous and flyby scenarios. Several
+
+                                                computational techniques are introduced to enhance efficiency, including a specialized solution
+
+                                                for bi-impulse cases and an adaptive step refinement strategy. The proposed method is validated
+
+                                                through three problems: 1) an impulsive variant of the fourth Global Trajectory Optimization
+
+                                                competition problem (GTOC4), 2) the GTOC11 problem, and 3) the original low-thrust GTOC4
+
+                                                problem. Each case demonstrates improvements in fuel consumption over the best-known
+
+                                                trajectories. These results give evidence of the generality and effectiveness of the proposed
+
+                                                method in global trajectory optimization.
+                                          ∗ Postdoctoral Researcher, School of Aerospace Engineering; Department of Aerospace Science and Technology, zhong.zhang@polimi.it.
+                                          † Lecturer, College of Aerospace Science and Engineering; State Key Laboratory of Space System Operation and Control, gx9645@126.com
+                                          ‡ Associate Professor, School of Astronautics, wudi2025@buaa.edu.cn, Member AIAA.
+                                          § Professor, School of Aerospace Engineering, baoyin@tsinghua.edu.cn. Senior Member AIAA
+                                          ¶ Professor, School of Aerospace Engineering; lĳunf@tsinghua.edu.cn. Senior Member AIAA (Corresponding Author)
+                                          ‖ Professor, Department of Aerospace Science and Technology, francesco.topputo@polimi.it, Senior Member AIAA
+                                                   Nomenclature
+
+𝑎        =   semimajor axis
+
+𝒅        =   decision variable
+
+D        =   admissible state set
+
+𝑒        =   eccentricity
+
+𝑔0       =   sea-level standard acceleration due to gravity
+
+𝑔𝑘       =   optimal cost for the 𝑘-th stage
+
+𝑔˜ 𝑘     =   approximated optimal cost for the 𝑘-th stage
+
+𝑖        =   inclination angle
+
+𝐼sp      =   specific impulse
+
+𝐽        =   objective function
+
+𝐽∗       =   optimal objective function value
+
+𝑚        =   spacecraft mass
+
+𝑚0       =   spacecraft initial mass
+
+𝑚 fuel   =   propellant mass
+
+𝑚𝑓       =   spacecraft final mass
+
+𝑁        =   number of flyby bodies
+
+𝑁𝑚       =   number of discrete masses
+
+𝑁𝑠       =   total number of states
+
+𝑁𝑡       =   number of discrete times
+
+𝑁𝑣       =   number of discrete velocities
+
+𝑃0       =   original optimal control problem
+
+𝑃1       =   multi-stage decision problem
+
+𝑃2       =   discretized and approximated multi-stage decision problem
+
+𝑃3       =   stochastic multi-stage decision problem
+
+𝑹        =   position vector of flyby body
+
+𝒓        =   spacecraft position vector
+
+𝒔        =   state variable
+
+S        =   admissible state set
+
+𝒖        =   control vector
+
+𝑽        =   velocity vector of flyby body
+
+𝒗        =   spacecraft velocity vector
+
+
+
+                                                              2
+Δ𝑣       =   velocity increment
+
+Δ𝑣 leg   =   velocity increment of each leg
+
+𝜀        =   prediction error
+
+𝜇        =   gravitational parameter
+
+𝝁        =   control policy
+
+U        =   admissible policy set
+
+Subscripts
+
+𝑘        =   𝑘-th flyby
+
+
+
+                                                     I. Introduction
+     Asteroid exploration has attracted much attention due to its scientific importance and potential for resource extraction.
+
+Only a few dozen among millions of known asteroids have been visited by spacecraft. Missions targeting the exploration
+
+of multiple asteroids have thus become a focal point due to their ability to achieve greater scientific impact with lower
+
+costs. NASA’s Lucy mission is set to investigate several Trojan asteroids [1]. During its encounter with asteroid 152830
+
+Dinkinesh, Lucy made the unexpected discovery of a binary structure [2]. Studies have shown that JAXA’s DESTINY+
+
+could extend its mission to include flybys of five additional asteroids [3], following its primary objective of exploring
+
+asteroid 3200 Phaethon. Other notable asteroid missions, such as ESA’s Hera [4, 5], ESA’s RAMSES[6], JAXA’s
+
+Hayabusa-2 [7] and NASA’s OSIRIS-REx [8], have consistently yielded groundbreaking findings, further driving
+
+enthusiasm and momentum in the field of asteroid exploration.
+
+     Optimizing multiple asteroid-linking trajectories is a complex and demanding task in interplanetary mission design.
+
+It involves scenarios with both multi-flyby and multi-rendezvous. The optimization process typically consists of
+
+two steps: first, identifying feasible asteroid exploration sequences through global optimization; second, refining
+
+trajectories using local optimization under a given sequence. The first step involves using global optimization algorithms
+
+to determine a feasible sequence of asteroids [9–11]. In this phase, the selection of candidate asteroids prioritizes
+
+computational efficiency over model fidelity, aiming to rapidly narrow down the vast search space. The optimization
+
+problem is inherently a complex combinatorial challenge featuring nonlinear time-dependent dynamics. To tackle such
+
+problems, heuristic algorithms such as genetic algorithms [12, 13], ant colony optimization [14], and tree search [15, 16]
+
+are commonly employed. The second step involves solving a nonlinear optimal control problem to refine the trajectory
+
+for a predefined asteroid visit sequence. This step typically relies on either direct methods [17–21] or indirect methods
+
+[22–24], which are chosen based on the specific requirements of the mission. This paper considers the second step, with
+
+a focus on designing fuel-optimal trajectories for a given flyby sequence.
+
+     Benchmark problems for multi-asteroid trajectories have also been developed as essential tools for evaluating
+
+
+
+                                                              3
+optimization algorithms. Out of the 12 Global Trajectory Optimization Competitions (GTOCs) held to date∗ , seven
+
+have involved asteroid-related missions [25, 26], all of which included multi-flyby or multi-rendezvous scenarios. These
+
+competitions highlight the inherent complexity of trajectory optimization for such missions. The availability of diverse
+
+benchmark problems provides researchers with a reliable framework for comparing optimization algorithms. This allows
+
+direct benchmarking against state-of-the-art methods without requiring detailed knowledge of their implementation.
+
+Moreover, it facilitates the straightforward validation of new algorithms by other researchers.
+
+   For the multi-flyby trajectory design problem, D’Amario et al. [27] investigated the direct method for impulsive
+
+multi-flyby problems and computed analytical derivatives. Subsequently, Olympio et al. [28] studied the indirect
+
+method for multi-flyby low-thrust trajectory optimization problems. Wang et al. [29] derived analytical gradients
+
+for interior point constraints, which improved the efficiency of solving low-thrust optimal control problems. Broadly
+
+speaking, the direct method discretizes the problem into a parameter optimization problem. Its primary advantage
+
+lies in its ability to handle many intermediate constraints. However, it suffers from limited control precision and can
+
+result in a high-dimensional optimization problem that remains computationally challenging. The indirect method, in
+
+contrast, addresses a low-dimensional nonlinear differential equation problem. However, it is highly sensitive to the
+
+initial guesses for the costate variables, making convergence difficult. With advancements in machine learning, neural
+
+networks have also been proposed to approximate solutions to these problems [3, 9] using training data derived from
+
+direct or indirect methods.
+
+   The methods above are typically limited to finding local optima. Previous studies have demonstrated the existence of
+
+numerous local optima, illustrating the inherent complexity of the problem [22, 30]. This finding highlights the critical
+
+importance of global optimization. Transforming the problem into a low-dimensional formulation and leveraging modern
+
+computational power to approximate exhaustive searches for a global optimum has become an important and challenging
+
+field of research. Zhang et al. [31] explored the application of dynamic programming to impulsive multi-rendezvous
+
+problems. Independently, Bellome et al. [32, 33] proposed a dynamic programming method for bi-impulse solutions
+
+in multi-flyby problems. Several critical challenges remain to be addressed, including the development of a more
+
+general and rigorous algorithmic proof of global optimality that unifies impulsive and low-thrust maneuvers, as well as
+
+multi-flyby and multi-rendezvous problems. Furthermore, previous studies have inevitably employed discretization to
+
+transform continuous variables, such as flyby epochs, into discrete counterparts, introducing errors. Establishing a
+
+theoretical bound for such errors is another significant theoretical challenge.
+
+   This paper aims to develop a rigorous and general global optimization method to address the challenges of multi-flyby
+
+trajectory optimization. The main contributions are summarized as follows.
+
+   • On the theoretical side, a problem reformulation is established which integrates multi-stage decision-making
+
+      with dynamic programming methods. This method rigorously proves global optimality for both impulsive and
+   ∗ Izzo, D., “GTOC Website” https://sophia.estec.esa.int/gtoc_portal/ [retrieved 1 December 2024]
+
+
+
+
+                                                             4
+      low-thrust maneuvers in rendezvous and flyby scenarios. Additionally, the relationship between the globally
+
+      optimal solutions of the discretized approximation and the original continuous problem is thoroughly analyzed,
+
+      resulting in rigorously derived error bounds for the first time.
+
+   • From a practical perspective, this paper introduces a specialized solution for pre-designed bi-impulse problems to
+
+      significantly enhance computational efficiency. Furthermore, an adaptive step technique is proposed to accelerate
+
+      the solution process. Although the adaptive step technique does not theoretically guarantee global optimality, it
+
+      performs excellently in practical test cases.
+
+   • The proposed method is applied to three benchmark problems: the GTOC4 problem, the GTOC4 impulsive
+
+      variant, and the GTOC11 problem. In all cases, the method achieves substantial fuel savings compared to existing
+
+      optimal solutions, highlighting its robustness and effectiveness in both impulsive and low-thrust mission scenarios.
+
+     The open-source code accompanying this work provides a valuable tool for researchers, enabling its use in future
+
+      research or as a benchmark for future studies.
+
+   The remainder of this paper is organized as follows: Section II introduces the modeling of the multi-flyby problem.
+
+Section III details the proof of global optimality and the derivation of error bounds. Section IV discusses global
+
+optimality and error bounds, examines the connections between low-thrust and impulsive schemes, as well as flyby and
+
+rendezvous scenarios, and proposes techniques to improve algorithmic efficiency. Section V illustrates the effectiveness
+
+of the proposed framework by solving three GTOC problems with optimized solutions. Finally, Sec. VI summarizes the
+
+findings and contributions of the paper.
+
+
+                                  II. Modeling of the Multi-Flyby Problem
+   This section considers the general formulation for optimizing multi-flyby trajectories under a given flyby sequence.
+
+This starts with an optimal control problem that includes interior-point equality constraints and is transformed into a
+
+multi-stage decision problem. After discretizing and approximating the problem, the tractable problem solved in this
+
+paper is obtained.
+
+
+A. Optimal Control Problem 𝑃0 with Interior-Point Equality Constraints
+
+   This section defines the multi-flyby trajectory optimization problem for a spacecraft, which is an optimal control
+
+problem with interior point equality constraints, hereinafter referred to as problem 𝑃0 :
+
+   Assume the spacecraft has 𝑁 + 1 flyby events, starting from the departure body (indexed by 1) and ending at the final
+
+flyby body (indexed by 𝑁 + 1), with the mission time spanning from 𝑡0 to 𝑡f . The use of 𝑁 + 1 flyby bodies facilitates
+
+the next formulation of the problem as an 𝑁-stage decision process, with each stage corresponding to a transfer between
+
+two consecutive flyby bodies.
+
+
+
+
+                                                            5
+    The objective of the optimization problem is to minimize fuel consumption:
+
+                                                                                        ∑︁
+                                     min 𝐽 = 𝑚 0 − 𝑚 𝑓          or    𝑚 fuel    or            Δ𝑣                         (1)
+
+
+The system’s dynamic equations are given in the general case without specifying the spacecraft’s dynamical environment,
+
+considering both impulsive and low-thrust maneuvers:
+
+
+                                          ¤ = 𝒇 (𝒙(𝑡), 𝒖(𝑡), 𝑡) ,
+                                          𝒙(𝑡)                              𝑡 ∈ [𝑡0 , 𝑡f ]                               (2)
+
+
+Specifically, for the test cases presented in Sec. V, continuous and impulsive thrust is considered in a two-body
+
+gravitational field.
+
+    For the low-thrust case, Eq. (2) can be explicitly expressed as:
+
+                                                      
+                                                          𝒓¤ = 𝒗
+                                                      
+                                                      
+                                                      
+                                                      
+                                                      
+                                                                   𝒓  𝑻
+                                                      
+                                                      
+                                                      
+                                                      
+                                                         𝒗¤ = −𝜇 3 +                                                     (3)
+                                                      
+                                                                 𝑟   𝑚
+                                                      
+                                                                ∥𝑻 ∥
+                                                       𝑚¤ = − 𝐼sp 𝑔0
+                                                      
+                                                      
+                                                      
+                                                      
+
+where 𝒓 = [𝑥, 𝑦, 𝑧] T and 𝒗 = [𝑢, 𝑣, 𝑤] T represent the position and velocity vectors of the spacecraft, respectively. The
+                                                   √︁
+mass of the spacecraft is denoted by 𝑚, and 𝑟 = 𝑥 2 + 𝑦 2 + 𝑧2 represents the distance from the spacecraft to the Sun.
+
+The gravitational parameter of the Sun is 𝜇. The thrust vector is given by 𝑻 = [𝑇𝑥 , 𝑇𝑦 , 𝑇𝑧 ] T , and its magnitude is
+    √︃
+𝑇 = 𝑇𝑥2 + 𝑇𝑦2 + 𝑇𝑧2 . The specific impulse is 𝐼sp , and the standard gravitational acceleration is 𝑔0 . The magnitude of the
+
+thrust is constrained by ∥𝑻 ∥ ≤ 𝑇max , and ∥.∥ represents the 2-norm.
+
+    For the impulsive thrust case, the spacecraft motion between two successive impulses is governed by the two-body
+
+gravitational field, which corresponds to setting ∥𝑻 ∥ = 0 in Eq. (3). Each impulsive maneuver is modeled as an
+
+instantaneous change in velocity and mass:
+
+
+                                               𝒓 (𝑡 + ) = 𝒓 (𝑡 − ),
+                                             
+                                             
+                                             
+                                             
+                                             
+                                             
+                                             
+                                             
+                                               𝒗(𝑡 + ) = 𝒗(𝑡 − ) + Δ𝒗,
+                                             
+                                             
+                                                                                                                         (4)
+                                             
+                                                                                 
+                                             
+                                                   +           −           ∥Δ𝒗∥
+                                             
+                                             
+                                              𝑚(𝑡    ) = 𝑚(𝑡     ) exp   −          ,
+                                             
+                                                                           𝑔0 𝐼sp
+
+where the impulse vector is Δ𝒗, and the moments immediately before and after the impulse are denoted by 𝑡 − and 𝑡 + ,
+
+respectively.
+
+    The constraints of problem 𝑃0 are the flyby conditions, which require that the spacecraft’s position coincides with
+
+
+
+                                                                6
+the flyby target at each flyby epoch without imposing restrictions on the velocity:
+
+
+                                           𝑟 𝑥 (𝑡 𝑘 ) = 𝑅 𝑘 𝑥 (𝑡 𝑘 )                                                              (5)
+
+                                           𝑟 𝑦 (𝑡 𝑘 ) = 𝑅 𝑘 𝑦 (𝑡 𝑘 )    for 𝑘 = 1, · · · , 𝑁 + 1                                  (6)
+
+                                            𝑟 𝑧 (𝑡 𝑘 ) = 𝑅 𝑘𝑧 (𝑡 𝑘 )                                                              (7)
+
+                                                 𝑡 𝑘 ≤ 𝑡 𝑘+1           for 𝑘 = 1, · · · , 𝑁.                                      (8)
+
+
+Here, 𝑹 𝑘 = [𝑅 𝑘 𝑥 , 𝑅 𝑘 𝑦 , 𝑅 𝑘𝑧 ] T represents the position of the flyby target, and 𝑡 𝑘 indicates the time of the 𝑘-th flyby event,
+
+with a total of 𝑁 + 1 flyby events.
+
+    Problem 𝑃0 is a general formulation of the multi-flyby trajectory optimization problem, which can be solved using
+
+either direct or indirect optimal control methods. The primary difficulty in solving this problem using classical methods
+
+lies in the flyby events being interior point equality constraints. Classical optimal control methods face significant
+
+challenges: direct methods often lead to a substantial increase in problem dimensionality, pseudospectral methods [17]
+
+struggle to enforce interior-point constraints due to their reliance on orthogonal collocation points, and traditional
+
+indirect methods are hampered by the need for accurate initial guesses of the costates, and also the emergence of the
+
+other multipliers associated to the interior-point constraints. These challenges become increasingly problematic as the
+
+number of flyby events increases [28].
+
+
+B. Multi-Stage Decision Problem 𝑃1
+
+    As previously mentioned, the complexity of the problem mainly arises from the interior-point constraints imposed
+
+by flyby events. This study leverages the flyby event constraints to reformulate the original problem 𝑃0 as a two-level
+
+optimization framework. The inner level solves an optimal control problem without intermediate constraints, with
+
+the initial and final states held fixed; while the outer level is formulated as a multi-stage decision problem, aimed
+
+at determining the state variables at each stage to find globally optimal solution. For clarity, it is important to note
+
+that problem 𝑃1 is not the final problem to be solved, but rather a virtual intermediate formulation that facilitates a
+
+more rigorous mathematical derivation. Some definitions are designed to facilitate later derivations using dynamic
+
+programming, and may differ from those commonly seen in direct and indirect methods of optimal control.
+
+    To begin, we define the inner optimal control problem. The globally optimal transfer cost between the 𝑘-th and
+
+(𝑘 + 1)-th flyby events is defined as 𝑔 𝑘 (𝒔 𝑘 , 𝒅 𝑘 ). It is assumed that the value of 𝑔 𝑘 is known, and a method to obtain this
+
+
+
+
+                                                                        7
+value will be presented in Sec. II.C. 𝑔 𝑘 (𝒔 𝑘 , 𝒅 𝑘 ) can be written as:
+
+
+                                         𝑔 𝑘 (𝒔 𝑘 , 𝒅 𝑘 ) = min Δ𝑣,          𝑘 = 1, 2, · · ·, 𝑁                               (9)
+                                                           𝒖 (𝑡 )
+
+                                         s.t.    𝒔 𝑘+1 = 𝒅 𝑘
+
+                                                 ¤ = 𝒇 (𝒙(𝑡), 𝒖(𝑡), 𝑡) ,
+                                                 𝒙(𝑡)                                    𝑡 ∈ [𝑡 𝑘 , 𝑡 𝑘+1 ]
+
+                                                𝒓 (𝑡 𝑘 ) = 𝑹 𝑘 (𝑡 𝑘 ),       𝒓 (𝑡 𝑘+1 ) = 𝑹 𝑘+1 (𝑡 𝑘+1 ).
+
+                                                𝒗(𝑡 𝑘 ) = 𝒗 𝑘 ,     𝒗(𝑡 𝑘+1 ) = 𝒗 𝑘+1 .
+
+                                                𝑚(𝑡 𝑘 ) = 𝑚 𝑘
+
+
+Here, 𝒔 𝑘 = [𝑡 𝑘 ; 𝒗 𝑘 ; 𝑚 𝑘 ] represents the state vector, and 𝒔 𝑘 ∈ S 𝑘 indicates that the state space is consistent with the
+
+possible states achievable in problem 𝑃0 . The vector 𝒅 𝑘 represents the decision variables, and D 𝑘 represents the decision
+
+space, i.e., 𝒅 𝑘 ∈ D 𝑘 (𝒔 𝑘 ). The state transition equation is 𝒔 𝑘+1 = 𝒅 𝑘 . Note that the decision variables 𝒅 𝑘 here refer
+
+to those of the outer 𝑁-stage decision problem, rather than the inner spacecraft control variable 𝒖. The subscript 𝑘
+
+indicates the value at the 𝑘-th stage.
+
+    The above optimization problem Eq. (9) is a typical two-point boundary value optimal control problem. Importantly,
+
+𝑔 𝑘 can be expressed as an explicit function of 𝒔 𝑘 and 𝒅 𝑘 independent of other state variables. This characteristic reflects
+
+the Markov property of the multi-flyby problem, which states that only the velocity and mass of spacecraft at the flyby
+
+epoch influence subsequent trajectories.
+
+    Thus, using 𝑔 𝑘 (𝒔 𝑘 , 𝒅 𝑘 ) as the cost function for the 𝑘th stage, we construct the objective for the outer 𝑁-stage decision
+
+problem. The 𝑁-stage decision problem 𝑃1 is defined as:
+
+                                                                     𝑁
+                                                                    ∑︁
+                                                       min 𝐽 =            𝑔 𝑘 (𝒔 𝑘 , 𝒅 𝑘 )                                   (10)
+                                                                    𝑘=1
+
+                                         s.t.    𝑔 𝑘 (𝒔 𝑘 , 𝒅 𝑘 ) = min Δ𝑣,         𝑘 = 1, 2, . . . , 𝑁
+
+                                                         𝒔 𝑘+1 = 𝒅 𝑘
+
+
+
+
+    In Sec. III.A, it will be rigorously proven that the globally optimal values of problems 𝑃1 and 𝑃0 are equal. Therefore,
+
+problem 𝑃0 can be reduced to problem 𝑃1 . However, this reformulation does not offer a substantial improvement over
+
+directly solving problem 𝑃0 . First, introducing a two-level structure does not simplify the problem; rather, it increases
+
+its complexity. Second, solving Eq. (10) involves infinitely many combinations of 𝑔 𝑘 (𝒔 𝑘 , 𝒅 𝑘 ) for different continuous
+
+state variables. Finally, solving the optimal control problem 𝑔 𝑘 (𝒔 𝑘 , 𝒅 𝑘 ) is computationally intensive. Nonetheless,
+
+
+
+                                                                         8
+transforming the optimal control problem with interior-point equality constraints into a multi-stage decision problem
+
+offers an alternative framework for addressing such problems. Once the problem is discretized and approximated, this
+
+approach proves to be advantageous in facilitating numerical solution.
+
+
+C. Discretization and Approximation of the Multi-Stage Decision Problem 𝑃2
+
+    For problem 𝑃1 , if we could skip the step of solving the optimal control problem and directly obtain 𝑔 𝑘 (𝒔 𝑘 , 𝒅 𝑘 ), the
+
+problem-solving process would naturally be greatly simplified. Fortunately, some available analytical tools [10, 11] and
+
+a wide range of emerging database methods [34] and machine learning techniques [3, 11, 35–40] provide the possibility
+
+to quickly predict 𝑔 𝑘 (𝒔 𝑘 , 𝒅 𝑘 ). In short, the accuracy and speed of predicting 𝑔 𝑘 (𝒔 𝑘 , 𝒅 𝑘 ) are continuously improving
+
+with advancements in computational techniques.
+
+    Therefore, the values of 𝑔 𝑘 can be obtained through approximations, denoted as 𝑔˜ 𝑘 :
+
+
+                                𝑔˜ 𝑘 (𝒔 𝑘 , 𝒅 𝑘 ) = 𝑔 𝑘 (𝒔 𝑘 , 𝒅 𝑘 ) + 𝜀 𝑘 = Δ𝑣˜ min ,        𝑘 = 1, 2, . . . , 𝑁         (11)
+
+
+where 𝜀 𝑘 represents the prediction error.
+
+    Furthermore, due to computational limitations, it is stipulated that all state variables can only take discrete values,
+
+and the decision variables change accordingly. Thus, the state space S 𝑘 and decision space D 𝑘 for problem 𝑃2 can only
+
+take certain discrete values of problem 𝑃1 . As a result, the state transition equation becomes 𝒔 𝑘+1 = 𝒅 𝑘 + 𝜽 𝑘 , where 𝜽 𝑘
+
+represents the rounding error introduced by discretization.
+
+    The discretization and approximation of the 𝑁-stage decision problem 𝑃2 is represented as:
+
+                                                                    𝑁
+                                                                   ∑︁
+                                                       min 𝐽 =            𝑔˜ 𝑘 (𝒔 𝑘 , 𝒅 𝑘 )                               (12)
+                                                                    𝑘=1
+
+                                         s.t.   𝑔˜ 𝑘 (𝒔 𝑘 , 𝒅 𝑘 ) = Δ𝑣˜ min ,      𝑘 = 1, 2, . . . , 𝑁
+
+                                                         𝒔 𝑘+1 = 𝒅 𝑘 + 𝜽 𝑘 .
+
+
+    Compared to problem 𝑃1 , problem 𝑃2 eliminates the step of solving the optimal control problem and directly uses the
+
+approximated values 𝑔˜ 𝑘 (𝒔 𝑘 , 𝒅 𝑘 ) while discretizing the state variables to meet computational performance requirements.
+
+
+                     III. Proof of Global Optimality and Error Bound Derivation
+    This section addresses several theoretical issues. First, the question of whether the globally optimal solutions of
+
+problems 𝑃0 and 𝑃1 are identical is examined. Second, a method for obtaining the globally optimal value of problem 𝑃2
+
+is introduced and rigorously proven. Finally, the deviation between the solution of problem 𝑃2 and the globally optimal
+
+solution of the original problem 𝑃0 is analyzed to assess the accuracy of the approximate solution.
+
+
+                                                                      9
+A. Proof of Equivalence of Globally Optimal Values for Problems 𝑃0 and 𝑃1
+
+    Let {𝒙 ∗ (𝑡), 𝒖 ∗ (𝑡)} be the optimal solution to problem 𝑃0 , with corresponding optimal cost denoted by 𝐽 ∗ . By
+
+definition of problem 𝑃0 , it follows that
+
+                                                                                                           ∑︁
+                                  𝐽 ∗ = min 𝐽 = min 𝑚 0 − 𝑚 𝑓
+                                                                        
+                                                                                 or      𝑚 fuel       or        Δ𝑣     (13)
+                                        𝒖 (𝑡 )     𝒖 (𝑡 )
+
+
+
+    The globally optimal cost for the 𝑁-stage decision problem 𝑃1 is defined as
+
+                                                             𝑁                          𝑁
+                                                                                                  !
+                                                            ∑︁                         ∑︁
+                                                   𝐺† =           𝑔 †𝑘 = min                 𝑔𝑘                        (14)
+                                                                            𝑔𝑘
+                                                            𝑘=1                        𝑘=1
+
+
+where 𝑔 †𝑘 denotes the stage cost at stage 𝑘 corresponding to the optimal total cost 𝐺 † .
+
+    To show that the global optimal values of problems 𝑃0 and 𝑃1 are equal, it suffices to prove that
+
+
+                                                                  𝐽∗ = 𝐺†.                                             (15)
+
+
+Proof. According to the definition of problem 𝑃1 , any control strategy in 𝑃1 is also feasible for problem 𝑃0 . Therefore,
+
+the solution space of 𝑃1 is a subset of that of 𝑃0 . It follows that
+
+
+                                                                  𝐽∗ ≤ 𝐺†.
+
+
+    To complete the proof, it remains to show that the following inequality holds:
+
+                                                                             𝑁
+                                                                            ∑︁
+                                                            ∗
+                                                            𝐽 ≥𝐺 =  †
+                                                                                    𝑔 †𝑘 .
+                                                                              𝑘=1
+
+
+    Consider splitting the optimal solution 𝐽 ∗ of problem 𝑃0 into 𝑁 segments, each transferring the state from 𝒔∗𝑘 to 𝒔∗𝑘+1
+
+for 𝑘 = 0, 1, . . . , 𝑁 − 1. Denote the cost of stage 𝑘 by 𝑔 ∗𝑘 . Then, the total cost is
+
+                                                                        𝑁
+                                                                       ∑︁
+                                                                𝐽∗ =          𝑔 ∗𝑘 .
+                                                                        𝑘=1
+
+
+    By the definition of 𝑔 𝑘 , it holds that
+
+
+                                        𝑔 ∗𝑘 𝒔∗𝑘 , 𝒅 ∗𝑘 ≥ 𝑔 𝑘 𝒔∗𝑘 , 𝒅 ∗𝑘 ,
+                                                                       
+                                                                                       𝑘 = 1, 2, . . . , 𝑁.
+
+
+
+
+                                                                       10
+    Therefore,
+                                                                 𝑁
+                                                                ∑︁              𝑁
+                                                                               ∑︁
+                                                         𝐽∗ =         𝑔 ∗𝑘 ≥         𝑔𝑘 .
+                                                                𝑘=1            𝑘=1
+
+    Since 𝐺 † is the global optimal cost of problem 𝑃1 , we have
+
+                                                               𝑁
+                                                              ∑︁
+                                                                     𝑔𝑘 ≥ 𝐺 † .
+                                                               𝑘=1
+
+
+    Hence,
+
+                                                                 𝐽∗ ≥ 𝐺†.
+
+
+    Combining both inequalities yields
+
+                                                                 𝐽∗ = 𝐺 †,
+
+
+which completes the proof.
+
+
+
+
+B. Global Optimization Method for Problems 𝑃1 and 𝑃2 and Proof of their Optimality
+
+    This subsection presents a method for obtaining the globally optimal values of problems 𝑃1 and 𝑃2 , centered on the
+
+dynamic programming algorithm and Bellman’s principle of optimality. The proof in this section does not directly
+
+address the two problems 𝑃0 and 𝑃1 . Instead, to facilitate the derivation in the following subsection, a new problem 𝑃3
+
+is introduced, and the global optimality of the solution algorithm for problem 𝑃3 is proven using Bellman’s principle of
+
+optimality.
+
+    The core logic involves introducing a random variable to characterize the approximation error of 𝑔˜ 𝑘 (𝒔 𝑘 , 𝒅 𝑘 ) in
+
+problem 𝑃2 relative to the original cost 𝑔 𝑘 (𝒔 𝑘 , 𝒅 𝑘 ). The classical theory of dynamic programming for stochastic control
+
+processes is used to establish a unified proof, which applies to both problems 𝑃1 and 𝑃2 . At the end of this subsection,
+
+some properties of the newly introduced problem are discussed.
+
+    Note that Eq. (11) shows that 𝑔˜ 𝑘 (𝒔 𝑘 , 𝒅 𝑘 ) in problem 𝑃2 is represented as the original cost 𝑔 𝑘 (𝒔 𝑘 , 𝒅 𝑘 ) plus an
+
+approximation error. Introducing a random variable 𝑤 𝑘 to characterize this error, the cost function for the 𝑘th stage
+
+becomes 𝑔˜ 𝑘 (𝒔 𝑘 , 𝒅 𝑘 , 𝑤 𝑘 ) = 𝑔 𝑘 (𝒔 𝑘 , 𝒅 𝑘 ) + 𝜀(𝑤 𝑘 ), where 𝜀(𝑤 𝑘 ) represents the estimation error, and W 𝑘 (𝒔 𝑘 , 𝒅 𝑘 ) represents
+
+the error space, satisfying the following relationship:
+
+
+
+                                                𝑤 𝑘 ∈ W 𝑘 (𝒔 𝑘 , 𝒅 𝑘 ),    𝑘 = 1, 2, . . . , 𝑁                                         (16)
+
+
+The form of the error space is not specified here but will be explained at the end of this subsection.
+
+    The state transition equation becomes 𝒔 𝑘+1 = 𝒅 𝑘 + 𝜽 𝑘 (𝑤 𝑘 ), where 𝜽 𝑘 (𝑤 𝑘 ) represents the state error.
+
+
+                                                                      11
+       The 𝑁-stage decision problem 𝑃3 with random variables is expressed as:
+
+                                                                                                      𝑁
+                                                                                                     ∑︁
+                                                         min 𝐽 =             max                 [         𝑔˜ 𝑘 (𝒔 𝑘 , 𝒅 𝑘 , 𝑤 𝑘 )]                            (17)
+                                                                       {𝑤1 ,𝑤2 ,...,𝑤𝑁 }
+                                                                                                     𝑘=1
+
+                                       s.t.      𝑔˜ 𝑘 (𝒔 𝑘 , 𝒅 𝑘 ) = 𝑔 𝑘 (𝒔 𝑘 , 𝒅 𝑘 ) + 𝜀(𝑤 𝑘 )                  𝑘 = 1, 2, . . . , 𝑁
+
+                                                           𝒔 𝑘+1 = 𝒅 𝑘 + 𝜽 𝑘 (𝑤 𝑘 )
+
+                                                                                                 𝑁
+                                                                                                 Í
+Proposition 1. For problem 𝑃3 , i.e., min 𝐽 =                               max              [         𝑔˜ 𝑘 (𝒔 𝑘 , 𝒅 𝑘 , 𝑤 𝑘 )], if the optimal solution exists, for
+                                                                     {𝑤1 ,𝑤2 ,...,𝑤𝑁 } 𝑘=1
+∀𝒔1 ∈ S1 , the following algorithm is obtained: for 𝑘 = 1, 2, . . . , 𝑁,
+
+                                                                                 h                                                       i
+                             𝐽 𝑘[DP] (𝒔 𝑘 ) = min               max                                              [DP]
+                                                                                     𝑔˜ 𝑘 (𝒔 𝑘 , 𝒅 𝑘 , 𝑤 𝑘 ) + 𝐽 𝑘+1  ( 𝒅 𝑘 + 𝜽 𝑘 (𝑤 𝑘 )) .                    (18)
+                                                𝒅 𝑘 ∈ D 𝑘 𝑤𝑘 ∈ W 𝑘 (𝒔 𝑘 ,𝒅 𝑘 )
+
+
+
+    Specifically, 𝐽 𝑁[DP]
+                       +1
+                          (𝒔 𝑁 +1 ) = 0.
+
+       If 𝐽 𝑘[DP] (𝒔 𝑘 ) is bounded, then the stage values obtained from Eq. (18) are the globally optimal values of 𝑃3 , i.e.,
+
+                                                                                          "𝑁                                 #
+                                                                                           ∑︁
+                                 ∗
+                                𝐽 (𝒔1 ) =           min                 max                          𝑔˜ 𝑘 (𝒔 𝑘 , 𝒅 𝑘 , 𝑤 𝑘 ) = 𝐽1[DP] (𝒔1 )
+                                              {𝒅1 ,𝒅2 ,...,𝒅 𝑁 } {𝑤1 ,𝑤2 ,...,𝑤𝑁 }
+                                                                                            𝑘=1
+
+
+.
+
+Proof. First, define 𝐽 𝑘∗ (𝒔 𝑘 ) as the globally optimal value of the decision problem from stage 𝑘 to the end of stage 𝑁,
+
+which spans (𝑁 + 1 − 𝑘) stages. For ∀𝒔 𝑘 ∈ S 𝑘 , 𝑘 = 1, 2, · · · , 𝑁, we have
+
+                                                                                                             "𝑁                         #
+                                                                                                              ∑︁
+                                     𝐽 𝑘∗ (𝒔 𝑘 ) =           min                         max                         𝑔˜ 𝑖 (𝒔𝑖 , 𝒅𝑖 , 𝑤 𝑖 ) .                   (19)
+                                                     {𝒅 𝑘 ,𝒅 𝑘+1 ,··· ,𝒅 𝑁 } {𝑤𝑘 ,𝑤𝑘+1 ,...,𝑤𝑁 }
+                                                                                                               𝑖=𝑘
+
+                ∗
+Specifically, 𝐽 𝑁 +1 (𝒔 𝑁 +1 ) = 0.
+
+       By definition, 𝐽 ∗ (𝒔1 ) = 𝐽1∗ (𝒔1 ). If each subproblem satisfies 𝐽 𝑘∗ (𝒔 𝑘 ) = 𝐽 𝑘[DP] (𝒔 𝑘 ), 𝑘 = 1, 2, · · · , 𝑁 + 1, then the
+
+proposition holds.
+
+       Therefore, we use mathematical induction to prove 𝐽 𝑘∗ (𝒔 𝑘 ) = 𝐽 𝑘[DP] (𝒔 𝑘 ), 𝑘 = 1, 2, · · · , 𝑁 + 1, for ∀𝒔 𝑘 ∈ S 𝑘 .
+                                        ∗                  [DP]                                                    ∗
+       When 𝑖 = 𝑁 + 1, by definition, 𝐽 𝑁 +1 (𝒔 𝑁 +1 ) = 𝐽 𝑁 +1 (𝒔 𝑁 +1 ) = 0 holds. Assume that when 𝑖 = 𝑘 + 1, 𝐽 𝑘+1 (𝒔 𝑘+1 ) =
+  [DP]
+𝐽 𝑘+1  (𝒔 𝑘+1 ) holds for ∀𝒔 𝑘+1 ∈ S 𝑘+1 .
+
+
+
+
+                                                                                       12
+    Then, for 𝑖 = 𝑘 and for ∀𝒔 𝑘 ∈ S 𝑘 , we have:
+
+                                                                            𝑁
+                                                                          ∑︁                              
+    𝐽 𝑘∗ (𝒔 𝑘 ) =          min                       max                           𝑔˜ 𝑖 (𝒔𝑖 , 𝒅𝑖 , 𝑤 𝑖 )                                                                                     (20)
+                    {𝒅 𝑘 ,𝒅 𝑘+1 ,...,𝒅 𝑁 } {𝑤𝑘 ,𝑤𝑘+1 ,...,𝑤𝑁 }
+                                                                             𝑖=𝑘
+                                                                                                           𝑁
+                                                                                                           ∑︁                              
+              =            min                       max                     𝑔˜ 𝑘 (𝒔 𝑘 , 𝒅 𝑘 , 𝑤 𝑘 ) +             𝑔˜ 𝑖 (𝒔𝑖 , 𝒅𝑖 , 𝑤 𝑖 )                                                     (21)
+                    {𝒅 𝑘 ,𝒅 𝑘+1 ,...,𝒅 𝑁 } {𝑤𝑘 ,𝑤𝑘+1 ,...,𝑤𝑁 }
+                                                                                                           𝑖=𝑘+1
+                                                                    (                                                              𝑁
+                                                                                                                                 ∑︁                             )
+              =            min                     max                  𝑔˜ 𝑘 (𝒔 𝑘 , 𝒅 𝑘 , 𝑤 𝑘 ) +              max                       𝑔˜ 𝑖 (𝒔𝑖 , 𝒅𝑖 , 𝑤 𝑖 )                               (22)
+                    {𝒅 𝑘 ,𝒅 𝑘+1 ,...,𝒅 𝑁 } 𝑤𝑘 ∈ W 𝑘 (𝒔 𝑘 ,𝒅 𝑘 )                                      {𝑤𝑘+1 ,...,𝑤𝑁 }
+                                                                                                                                 𝑖=𝑘+1
+                               (                                                                                                                    𝑁                                  )
+                                                                                                                                                    ∑︁
+              = min                      min                   max                       𝑔˜ 𝑘 (𝒔 𝑘 , 𝒅 𝑘 (𝒔 𝑘 ), 𝑤 𝑘 ) +            max                    𝑔˜ 𝑖 (𝒔𝑖 , 𝝁𝑖 (𝒔𝑖 ), 𝑤 𝑖 )        (23)
+                    𝒅 𝑘 ∈ D𝑘       {𝒅 𝑘+1 ,...,𝒅 𝑁 } 𝑤𝑘 ∈ W 𝑘 (𝒔 𝑘 ,𝒅 𝑘 (𝒔 𝑘 ) )                                                {𝑤𝑘+1 ,...,𝑤𝑁 }
+                                                                                                                                                   𝑖=𝑘+1
+
+
+    Next, using Lemma 1, we interchange the min and max operators. Let 𝒘 = 𝑤 𝑘 , 𝝁 = [𝒅 𝑘 ; 𝒅 𝑘+1 ; . . . ; 𝒅 𝑁 −1 ],
+
+𝒅 = [𝒅 𝑘 ; 𝒅 𝑘+1 ; . . . ; 𝒅 𝑁 −1 ], and 𝒇 (𝒘) = 𝒔 𝑘+1 .
+
+                                                               
+                                                                                                               𝑤 𝑘 ∈ W 𝑘 (𝒔 𝑘 , 𝒅 𝑘 )
+                                                               
+                                                                𝑔˜ 𝑘 (𝒔 𝑘 , 𝒅 𝑘 (𝒔 𝑘 ), 𝑤 𝑘 ),
+                                                               
+                                                               
+                                                               
+                                               𝐺 0 (𝒘) =
+                                                               
+                                                                ∞,                     otherwise
+                                                               
+                                                               
+                                                               
+                                                                             𝑁
+                                                                                                                                         𝑤 𝑖 ∈ W𝑖 (𝒔𝑖 , 𝒅𝑖 )
+                                                                             Í
+                                                                {𝑤 max
+                                                               
+                                                               
+                                                                               𝑔˜ 𝑖 (𝒔𝑖 , 𝒅𝑖 (𝒔𝑖 ), 𝑤 𝑖 ),
+                                                                     ,...,𝑤 }
+                                     𝐺 1 ( 𝒇 (𝒘), 𝒅) =                   𝑘+1          𝑁    𝑖=𝑘+1
+                                                               
+                                                                ∞,                                                                      otherwise
+                                                               
+                                                               
+                                                               
+
+    According to Lemma 1, Eq. (23) is further transformed into
+
+                                                                    (                                                                               𝑁
+                                                                                                                                                  ∑︁                              )
+               𝐽 𝑘∗ (𝒔 𝑘 ) =        min            max                  𝑔˜ 𝑘 (𝒔 𝑘 , 𝒅 𝑘 , 𝑤 𝑘 ) +              min                max                      𝑔˜ 𝑖 (𝒔𝑖 , 𝒅𝑖 , 𝑤 𝑖 )             (24)
+                                   𝒅 𝑘 ∈ D 𝑘 𝑤𝑘 ∈ W 𝑘 (𝒔 𝑘 ,𝒅 𝑘 )                                    {𝒅 𝑘+1 ,...,𝒅 𝑁 } {𝑤𝑘+1 ,...,𝑤𝑁 }
+                                                                                                                                                   𝑖=𝑘+1
+
+                                                                                                    ∗
+                                                                                                                       
+                               = min               max                  𝑔˜ 𝑘 (𝒔 𝑘 , 𝒅 𝑘 , 𝑤 𝑘 ) + 𝐽 𝑘+1 (𝒔 𝑘+1 )                                                                             (25)
+                                   𝒅 𝑘 ∈ D 𝑘 𝑤𝑘 ∈ W 𝑘 (𝒔 𝑘 ,𝒅 𝑘 )
+                                                                    h                                                       i
+                                                                                                    [DP]
+                               = min               max                  𝑔˜ 𝑘 (𝒔 𝑘 , 𝒅 𝑘 , 𝑤 𝑘 ) + 𝐽 𝑘+1  (𝒔 𝑘+1 )                                                                            (26)
+                                   𝒅 𝑘 ∈ D 𝑘 𝑤𝑘 ∈ W 𝑘 (𝒔 𝑘 ,𝒅 𝑘 )
+                                                                    h                                                                      i
+                                                                                                    [DP]
+                               = min               max                  𝑔˜ 𝑘 (𝒔 𝑘 , 𝒅 𝑘 , 𝑤 𝑘 ) + 𝐽 𝑘+1  ( 𝒅 𝑘 + 𝜽 𝑘 (𝑤 𝑘 ))                                                                 (27)
+                                   𝒅 𝑘 ∈ D 𝑘 𝑤𝑘 ∈ W 𝑘 (𝒔 𝑘 ,𝒅 𝑘 )
+
+                               = 𝐽 𝑘[DP] (𝒔 𝑘 )                                                                                                                                              (28)
+
+
+    Therefore, the induction hypothesis holds, and the original proposition is proved.
+
+    As already pointed out, the above proof does not depend on the specific form of the error space, meaning the
+
+corresponding error space can be freely specified. Thus, two important properties of problem 𝑃3 are obtained as follows:
+
+    1) When all 𝑤 𝑘 are constantly zero, i.e., ∀𝑘, 𝑤 𝑘 = 0, the corresponding error terms (estimation error or state error)
+
+        will also be zero. In this special case, problem 𝑃3 degenerates into problem 𝑃1 . This indicates that problem 𝑃1
+
+        can be regarded as a special case of problem 𝑃3 under no perturbation or disturbance.
+
+
+                                                                                                  13
+    2) In problem 𝑃2 , the objective function value 𝑔˜ 𝑘 at each stage corresponds to 𝑤 𝑘 and 𝑔˜ 𝑘 in problem 𝑃3 . This
+
+       implies that by appropriately choosing 𝑤 𝑘 , a solution in problem 𝑃3 can match a solution in problem 𝑃2 .
+
+       Therefore, the solution space of problem 𝑃2 is a subset of the solution space of problem 𝑃3 .
+
+    From this, it can be concluded that the solution spaces of problems 𝑃1 and 𝑃2 are subsets of the solution space of
+
+problem 𝑃3 . Therefore, the difference in the globally optimal solutions between problems 𝑃1 and 𝑃2 will naturally be
+
+constrained by the difference in the globally optimal solutions between problems 𝑃1 and 𝑃3 . This will facilitate the
+
+derivation in the next section.
+
+
+C. Derivation of the Upper Bound of the Globally Optimal Solution Error between Problems 𝑃0 and 𝑃2
+
+    This section addresses another key research question. After transforming the original problem 𝑃0 into a multi-stage
+
+decision problem and then discretizing and approximating it into problem 𝑃2 , is there any mathematical relationship
+
+between the globally optimal solutions of problem 𝑃2 and the original problem 𝑃0 ? Furthermore, what is the maximum
+
+possible discrepancy between the two? This section addresses these questions.
+
+    To avoid confusion, the globally optimal solutions of each stage for problems 𝑃1 , 𝑃2 , and 𝑃3 are defined as 𝐽 𝑘[ 𝑃1 ] (𝒔 𝑘 ),
+
+𝐽 𝑘[ 𝑃2 ] (𝒔 𝑘 ), and 𝐽 𝑘[ 𝑃3 ] (𝒔 𝑘 ), respectively, for 𝑘 = 1, 2, · · · , 𝑁 + 1. For convenience in the subsequent derivations,
+
+𝜀 max = max {𝜀 1 (𝑤 1 ) , 𝜀2 (𝑤 2 ) , . . . , 𝜀 𝑁 (𝑤 𝑁 )} is defined as the maximum error in the approximation of 𝑔˜ across all
+
+stages. Using the relevant formulas from the previous section’s proof, the following equation holds:
+
+
+                            3]
+                     𝐽 𝑁[ 𝑃+1                      1]
+                                (𝒔 𝑁 +1 ) = 𝐽 𝑁[ 𝑃+1  (𝒔 𝑁 +1 ) = 0                                                                            (29)
+                                                                  h                                i
+                                                                                      3]
+                          𝐽 𝑁[ 𝑃3 ] (𝒔 𝑁 ) = min max 𝑔˜ 𝑁 (𝒔 𝑁 , 𝒅 𝑁 , 𝑤 𝑁 ) + 𝐽 𝑁[ 𝑃+1  (𝒔 𝑁 +1 )
+                                            𝒅 𝑁 ∈ D 𝑁 𝑤𝑁 ∈ W 𝑁
+                                                       h                                                      i
+                                       ≤ min                                                 1]
+                                                           𝑔 𝑁 (𝒔 𝑁 , 𝒅 𝑁 ) + 𝜀 max + 𝐽 𝑁[ 𝑃+1  (𝒔 𝑁 +1 )
+                                            𝒅 𝑁 ∈D𝑁
+
+                                      = 𝐽 𝑁[ 𝑃1 ] (𝒔 𝑁 ) + 𝜀 max                                                                               (30)
+                                                                              h                                                            i
+                           3]
+                     𝐽 𝑁[ 𝑃−1 (𝒔 𝑁 −1 ) =       min                 max           𝑔˜ 𝑁 −1 (𝒔 𝑁 −1 , 𝒅 𝑁 −1 , 𝑤 𝑁 −1 ) + 𝐽 𝑁[ 𝑃3 ] (𝒔 𝑁 )
+                                            𝒅 𝑁 −1 ∈ D 𝑁 −1 𝑤𝑁 −1 ∈ W 𝑁 −1
+                                                              h                                                                    i
+                                       ≤        min               𝑔 𝑁 −1 (𝒔 𝑁 −1 , 𝒅 𝑁 −1 ) + 𝜀 max + 𝐽 𝑁[ 𝑃1 ] (𝒔 𝑁 ) + 𝜀 max
+                                            𝒅 𝑁 −1 ∈ D 𝑁 −1
+
+                                              1]
+                                      = 𝐽 𝑁[ 𝑃−1 (𝒔 𝑁 −1 ) + 2𝜀 max                                                                            (31)
+
+                                      ...
+
+                        𝐽1[ 𝑃3 ] (𝒔1 ) ≤ 𝐽1[ 𝑃1 ] (𝒔1 ) + 𝑁𝜀max                                                                                (32)
+
+
+    Since the solution space of problem 𝑃2 is a subset of the solution space of problem 𝑃3 , and according to Eq. (15),
+
+we have
+
+                                  𝐽1[ 𝑃2 ] (𝒔1 ) ≤ 𝐽1[ 𝑃1 ] (𝒔1 ) + 𝑁 · 𝜀 max = 𝐽1[ 𝑃0 ] (𝒔1 ) + 𝑁 · 𝜀 max ,                                   (33)
+
+
+
+                                                                               14
+                           Fig. 1   The logical relationships between different problems.
+
+
+   Equation (33) is referred to as the error upper bound equation in this paper. It indicates that the final obtained
+
+solution will not differ from the globally optimal solution of the original problem by more than 𝑁 times the maximum
+
+single-stage error. Thus, this paper provides the globally optimal solution with theoretical guarantees for the multi-flyby
+
+problem.
+
+
+                                           IV. Analysis and Discussion
+   The goal of this paper is to exploit the Markov property of multi-flyby problems to develop a more efficient modeling
+
+formulation, enabling dynamic programming methods to find the global optimum. This section examines the logical
+
+interconnections between the original optimal control problem (𝑃0 ) and its reformulated multi-stage decision problems
+
+(𝑃1 , 𝑃2 , and 𝑃3 ). This reformulation facilitates error quantification and ensures globally optimal solutions. In what
+
+follows, the connections between multi-flyby and rendezvous problems and their implications for both impulsive and
+
+low-thrust trajectory design are analyzed. Finally, this section explores the computational complexity of the proposed
+
+methods and introduces practical solving techniques.
+
+
+A. Relationship between Problems and Explanation of Globally Optimal Solutions
+
+   The relationships between the problems are illustrated in Fig. 1. Problem 𝑃0 is defined as the original optimal
+
+control problem, which involves interior point equality constraints. Problem 𝑃1 is a multi-stage decision problem with
+
+the same globally optimal value as problem 𝑃0 . Problem 𝑃2 is a discretized and approximated version of Problem
+
+𝑃1 , where the transition costs and state space are approximated, making it suitable for computational implementation.
+
+Problem 𝑃3 is a constructive multi-stage decision problem with random variables that aims to integrate the solution
+
+spaces of problems 𝑃2 and 𝑃1 , as shown in Fig. 2. Although introducing random variables in Problem 𝑃3 increases the
+
+complexity of the problem, it clarifies the relationship between the globally optimal solutions of Problems 𝑃1 and 𝑃2 by
+
+
+                                                            15
+                                                                           P3
+                                                     Global Optima
+                                           P0         are Identical
+                                                                         P1     P2
+                                      Optimal Control                   Multi-Stage
+                                         Problem                      Decision Problem
+
+                        Fig. 2   The solution space relationship between different problems.
+
+
+embedding them into a higher-dimensional solution space.
+
+    According to Proposition 1, solving problem 𝑃2 using dynamic programming yields the globally optimal solution.
+
+However, the solution to problem 𝑃2 obtained by this method is essentially a discretized and approximated version of
+
+the globally optimal solution to the original problem 𝑃1 . Therefore, Eq. (33) is introduced in this paper to quantify the
+
+error between the two solutions.
+
+
+B. Analysis of the Error Upper Bound
+
+   In the derivation of the error upper bound in Eq. (33), the term with 𝑁 times the single-stage maximum error 𝜀 max
+                                                                         Í
+can be simplified to the sum of the maximum errors at each stage, i.e., 𝜀 𝑖 (𝑤 𝑖 ). If the optimization criterion is to
+
+minimize fuel mass consumption, the related formulas become more complex and cannot be represented as a simple
+
+linear superposition. This indicates that minimizing the total velocity increment is more suitable as the optimization
+
+criterion for dynamic programming algorithms despite the equivalence of the two problems in terms of optimization
+
+criteria.
+
+    When refining the discrete grid and improving the approximation function, i.e., as 𝜀 max → 0, the result approaches
+
+the theoretical globally optimal solution of the original problem. Note that the upper error bound represents a theoretical
+
+limit; in practice, the worst-case scenario is rare, and approximate solutions are typically near the true global optimum.
+
+Moreover, stochastic dynamic programming theory can be applied if the random variables follow unbiased probability
+
+estimates and the error space is measurable. It can then be proven that the expected globally optimal value of problem
+
+𝑃3 equals the globally optimal value of problem 𝑃1 .
+
+    The significance of the error upper bound equation lies in two aspects: first, in practical mission design, if the
+
+calculated error upper bound meets the specified design target requirements, calculations can be stopped immediately,
+
+saving further work using other methods; second, easily obtainable single-state error information can be used with the
+
+error upper bound in Eq. (33) to derive the error for all stages. Previously, there were few effective methods to directly
+
+evaluate the error of the entire solution, making this a key contribution of this paper. This approach thereby provides an
+
+efficient tool for evaluating solution properties.
+
+
+
+
+                                                                 16
+C. Connection between Multi-Flyby and Multi-Rendezvous Problems
+
+   The main difference in mathematical representation between the multi-flyby problem and the multi-rendezvous
+
+problem is that the rendezvous problem requires both the position and the velocity to coincide with the target at the
+
+rendezvous epoch. Hence, the multi-rendezvous problem can be regarded as a special case of the multi-flyby problem.
+
+The logical framework in this paper is an extension of the method presented in [31], and has also been applied in
+
+designing the GTOC12 problem [41].
+
+   Unlike in the multi-flyby problem, omitting the velocity term in the multi-rendezvous problem reduces the
+
+state variable dimension by three. This reduction lowers the time complexity of the algorithm, thereby improving
+
+computational efficiency. This observation also motivates other reductions in the state variable dimension, under certain
+
+simplifications, to improve computational performance in the flyby problem. Details of these simplifications and their
+
+implications are discussed in Sec.IV.E.
+
+
+D. Connection between Impulsive and Low-Thrust Maneuvers
+
+   In the multi-stage decision problem, the difference between impulsive and low-thrust propulsion is further reflected
+
+in the treatment of state variables: the mass term can be neglected in impulsive propulsion, while it must be included for
+
+low-thrust propulsion, directly affecting the spacecraft’s reachability. The reachability refers to whether the spacecraft
+
+can reach the target under given initial and final positions and velocities through low-thrust propulsion. This is feasible
+
+in the context of global optimization, as a spacecraft may consume more fuel earlier to improve its later reachability,
+
+ultimately achieving a better overall result. Therefore, compared with impulsive propulsion, low-thrust trajectory
+
+optimization introduces additional challenges due to the need for reachability constraints.
+
+                                          Stage 1                          Stage 2          Stage 3 …
+
+                                          t1 t2 t3       Epochs at
+                                                         Each Stage        t 4 t5 t 6       t7 t8 t9
+                                          t1 → 100 kg            1.5 kg
+                                                                           t4→ 98 kg         t7 →
+                                          t2 → 100 kg            6.2 kg
+                                                                           t4→ 94 kg         t7 →
+                                                                 6.9 kg
+                                          t3 → 100 kg            1.5 kg                      t7 →
+                                                                  3.7 kg   t5→ 98 kg         t8 →
+                                                                           t5→ 96 kg         t8 →
+                                                                                        …
+
+
+                                                                                                    …
+
+
+
+
+                                                                  6.8 kg
+
+                                                                           t5→ 94 kg         t8 →
+                                       State Variable:
+                                       Epoch   → Mass             3.8 kg
+                                                                                             t9 →
+                                       Mass Step: 2 kg                     t6→ 96 kg         t9 →
+                                                                                             t9 →
+
+                                           1st                             2nd              3th  …
+                                       Rendezvous                      Rendezvous       Rendezvous
+
+
+
+
+              Fig. 3   A schematic diagram of multi-rendezvous low-thrust dynamic programming.
+
+
+   Including mass as a state variable may cause confusion, as the final mass in a fuel-optimal control problem is
+
+
+                                                                           17
+determined during the solution process rather than predefined. To clarify this process and highlight the role of mass as a
+
+state variable, a multi-rendezvous low-thrust problem is used as an example in this section, with an analogous treatment
+
+for multi-flyby problems. As shown in Fig. 3, the spacecraft’s initial mass is set to 100 kg with a step size of 2 kg. First,
+
+all possible states are generated for Stage 1. Next, for each terminal time in Stage 2 (e.g., 𝑡4 , 𝑡5 , 𝑡6 ), the corresponding
+
+optimal control problems are solved, and the resulting fuel mass consumption (converted from Δ𝑣) is recorded in the
+
+figure. For instance, at 𝑡4 , the lowest fuel consumption could be 1.5 kg, while other feasible trajectories may require 6.2
+
+kg or 6.9 kg. Hence, the state at 𝑡 4 is classified into two discrete mass levels: 98 kg and 94 kg. If a state in Stage 2, such
+
+as (𝑡4 , 94 kg), can be reached from multiple Stage 1 states, the predecessor yielding the lowest fuel consumption, e.g.,
+
+(𝑡 2 , 100 kg), is selected.
+
+    It is important to note that mass discretization is employed solely to assess the feasibility of different trajectories;
+
+no approximations are made to the actual fuel consumption. In other words, when using the state (𝑡4 , 94 kg) as
+
+the initial condition for Stage 3, the initial mass should be the continuous value obtained from the calculation (e.g.,
+
+100 − 6.2 = 93.8 kg), thereby minimizing the error introduced by mass discretization.
+
+
+E. Complexity Analysis and Practical Solving Techniques
+
+1. Low thrust
+
+    In a multi-stage decision problem consisting of 𝑁 stages, each with 𝑁 𝑠 states, the dynamic programming algorithm
+
+generally requires updating decisions and computing state transitions for every state in each stage. This means that the
+
+computational complexity per stage is 𝑂 (𝑁 𝑠2 ). As there are 𝑁 such stages, the total time complexity is 𝑂 (𝑁 𝑠2 (𝑁 −1) + 𝑁 𝑠 ).
+
+    For the multi-flyby problem, let 𝑁𝑡 = ⌈(𝑇end − 𝑇start )/𝑇step ⌉ represent the total number of discrete time steps in
+
+each stage, where 𝑇step is the discrete time step size. Similarly, let 𝑁 𝑣 and 𝑁 𝑚 represent the total number of discrete
+
+velocities and masses in each stage, respectively. Therefore, the total number of states per stage can be expressed as
+
+𝑁 𝑠 = 𝑁𝑡 𝑁 𝑣3 𝑁 𝑚 . The computational effort of the dynamic programming process is approximately:
+
+
+                                                                                   2
+                                          𝑁 𝑠2 (𝑁 − 1) + 𝑁 𝑠 ≈ 𝑁 𝑠2 𝑁 = 𝑁𝑡2 𝑁 𝑣6 𝑁 𝑚 𝑁.
+
+
+    Assuming 𝑁𝑡 = 𝑁 𝑣 = 𝑁 𝑚 = 𝑁 = 10, this method requires 1011 calculations, highlighting the “curse of dimensionality”
+
+faced by dynamic programming. The following paragraphs introduce practical techniques aimed at mitigating these
+
+computational demands. Although these methods do not fully overcome the curse of dimensionality, they substantially
+
+lower the computational complexity, making the approach more feasible.
+
+    Low-thrust propulsion significantly restricts a spacecraft’s reachable state region. Therefore, a natural strategy is
+
+to limit the search to states near transfer trajectories with relatively low fuel consumption. This aligns with the goal
+
+of optimizing fuel consumption and increases the likelihood of successful transfers. In extreme cases, trajectories
+
+
+                                                               18
+determined solely by the dynamical environment and requiring no maneuvers are inherently reachable, regardless
+
+of thrust limitations. In the two-body problem, this corresponds to Keplerian orbits, which can be calculated using
+
+well-established Lambert solvers [42–44]. Considering the dynamical environment with perturbations, like cislunar
+
+space [45, 46], some improved Lambert solvers have also been widely developed for computational convenience [47–49].
+
+   Thus, the first step involves computing ballistic trajectories between consecutive layers and discarding those with
+
+eccentricities or inclinations apparently out of range. This step helps identify feasible arrival time intervals. Next, the
+
+velocity dimension of each layer is dynamically determined based on time. Specifically, for each epoch step in the
+
+current stage, the ballistic trajectory is computed from the average time of the previous layer to the current epoch. The
+
+state velocities at this epoch are centered around the terminal velocity of the ballistic trajectory. Finally, as noted in
+
+Sec.IV.D, the terminal mass is not pre-specified but is determined based on subsequent calculations.
+
+
+2. Bi-Impulse
+
+                                           Stage 1                 Stage 2            Stage 3 …
+
+                                          t1 t2 t       Epochs at
+                                                                  t t5 t 6
+                                                      3 Each Stage 4                  t7 t8 t9
+                                           / → t1                      t1 → t4         t 4 → t7
+                                           / → t2                      t2 → t4         t5 → t 7
+                                           / → t3                      t3 → t 4        t6 → t7
+                                                                       t1 → t5         t4 → t8
+                                                                       t 2 → t5        t5 → t8
+                                                                       t3 → t5         t6 → t8
+                                        State Variable:
+                                                                       t1 → t6         t 4 → t9
+                                         Last
+                                                → Current
+                                                                                  …
+
+
+
+
+                                        Epoch     Epoch
+                                                                       t 2 → t6        t5 → t9
+                                                                       t3 → t 6        t 6 → t9
+
+                                             1st                        2nd              3th      …
+                                            Flyby                      Flyby            Flyby
+
+                                                                V1        V2
+
+                                                                       ∆V
+
+
+                        Fig. 4   A schematic diagram of bi-impulse dynamic programming.
+
+
+   This subsection introduces the bi-impulse scenario, where the dimensionality of the state variables can be further
+
+reduced. The bi-impulse scenario is defined by applying impulses only at the start and end points of the transfer
+
+trajectory without intermediate maneuvers. This scenario is widely considered in the preliminary design of deep-space
+
+missions [50, 51]. Specifically, a Lambert problem solver computes a transfer trajectory between the start and end
+
+points that satisfies the position conditions. The required velocity increment corresponds to the difference between the
+
+two impulses. In this case, the trajectory velocity is determined entirely by the Lambert problem solver, enabling the
+
+velocity to be excluded from the state variables and time alone to be retained. Thus, the state variable dimensionality
+
+can be reduced to include only the current epoch and the last flyby epoch. As a result, the state modeling of the
+
+problem simplifies into a two-dimensional state variable form, as illustrated in Fig. 4. Furthermore, this simplification
+
+
+                                                                        19
+introduces time-matching characteristics that allow the computational complexity to be further reduced by leveraging
+
+these properties.
+
+    Following a derivation similar to Sec. IV.E.1, the number of discrete time points in each stage is 𝑁𝑡 . In this case, the
+
+state variables, scaling as 𝑁𝑡2 and representing the discrete time points for each stage, lead to an overall computational
+
+complexity of 𝑂 (𝑁𝑡4 𝑁). As shown in Fig. 4, the state variables include the last flyby epoch. Consequently, only the
+
+time points from the previous stage that align with the current stage’s last flyby epoch are relevant. For instance, to
+
+compute the optimal solution for the first state variable (𝑡4 , 𝑡7 ) in Stage 3 of Fig. 4, only the current time matches 𝑡 4 in
+
+Stage 2 are considered. State variables corresponding to other times are disregarded as they do not impact the current
+
+computation. This refinement reduces the computational complexity at this step from 𝑁𝑡2 to 𝑁𝑡 , lowering the total
+
+complexity to 𝑂 (𝑁𝑡3 𝑁). To facilitate understanding of the algorithm design, a pseudocode is provided in Alg. 1.
+
+Algorithm 1 Dynamic Programming for the Two-Impulse Multi-Flyby Problem
+Require: Mission sequence
+Ensure: Total Δ𝑣, optimal result path
+ 1: Initialize sequence length: N ← length(sequence)
+ 2: For the initial stage (stage = 0), generate possible initial states based on feasible departure times:
+    dp_states[0] ← {State(𝑡) | 𝑡 ∈ feasible departure times}
+ 3: for stage = 1 to N − 1 do
+ 4:    Set departure body Bodydeparture and target body Bodytarget
+ 5:    Initialize current stage’s state list: dp_states[stage] ← ∅
+ 6:    Determine feasible arrival times at Bodytarget based on time and mission constraints
+ 7:    for each feasible arrival time 𝑡 do
+ 8:       for each prev_state in dp_states[stage − 1] do
+ 9:          Compute the required Δ𝑣 leg for this leg
+10:          Compute cumulative total Δ𝑣: total_dv ← prev_state.total_dv + Δ𝑣 leg
+11:          if total_dv is the smallest among those with the same prev_state.𝑡 then
+12:             Create new state new_state with:
+    •              Time new_state.𝑡 ← 𝑡
+    •              Last time new_state.𝑡 last ← prev_state.𝑡
+    •              Cumulative Δ𝑣 new_state.total_dv ← total_dv
+    •              Predecessor state new_state.prev_state ← prev_state
+13:             Add new_state to dp_states[stage]
+14:          end if
+15:       end for
+16:    end for
+17: end for
+18: return The optimal total Δ𝑣 and the optimal result path
+
+
+
+    The calculation of Δ𝑣 leg in Alg. 1, line 9, proceeds as follows: Assume the state at the previous stage is
+
+𝒙prev = (𝑡last , 𝑡departure ), and the state at the current stage is 𝒙current = (𝑡departure , 𝑡target ). The celestial bodies involved
+
+at these three time points are 𝐴0 , 𝐴1 , and 𝐴2 , where 𝐴1 and 𝐴2 correspond to Bodydeparture and Bodytarget in Alg. 1,
+
+respectively. The respective paths of the trajectory legs 𝐴0 –𝐴1 and 𝐴1 –𝐴2 can be determined using a Lambert problem
+
+solver. Let the velocities at 𝐴1 for these two trajectory legs be 𝒗 1 (from 𝐴0 –𝐴1 ) and 𝒗 2 (from 𝐴1 –𝐴2 ). The Δ𝑣 leg
+
+
+
+                                                                 20
+required is then given by:
+
+                                                     Δ𝑣 leg = ∥𝒗 1 − 𝒗 2 ∥.                                                (34)
+
+
+3. Adaptive step technique
+
+    This subsection introduces the adaptive step technique, which significantly accelerates the computation speed.
+
+Although it sacrifices the theoretical guarantee of global optimality, the subsequent case study demonstrates its practical
+
+effectiveness.
+
+    The adaptive step technique can be conceptually understood as an iterative process that performs progressively finer
+
+dynamic programming with smaller step sizes within a narrow “tube” of the previous trajectory. The adaptive step
+
+technique begins by using a relatively large step size to obtain a rough trajectory. The step size is then reduced, and the
+
+algorithm is executed only around this trajectory. This reduction in range ensures that, even with a smaller step size,
+
+the number of states is minimized, resulting in a fast computation speed. Iterating this process allows the step size
+
+to reach the desired threshold. However, the drawback of this method is that each iteration is conducted around the
+
+previous result. Consequently, the globally optimal solution is constrained by its localized nature, which may lead to
+
+local optima. To mitigate this risk, it is essential to maintain a relatively large area around the trajectory to achieve better
+
+results and avoid using excessively large step sizes during the initial iteration. Therefore, the two key parameters in the
+
+adaptive step technique are the initial step size and the range around the trajectory.
+
+
+                                                       V. Examples
+    This section verifies the effectiveness of the proposed method through three scenarios: the GTOC4 impulsive
+
+problem, the GTOC11 problem, and the GTOC4 problem. All scenarios focus on the fuel-optimal trajectory design for
+
+multiple flybys. The first scenario validates the impulsive problem and evaluates the performance of different step sizes
+
+and the adaptive step technique. The second scenario addresses a problem with constraints on the maximum magnitude
+
+of the flyby velocity and further analyzes the error upper bound. The third scenario focuses on low-thrust maneuvers,
+
+which involve the largest number of state variables.
+
+    The computational environment for all tests was as follows: The first two scenarios were executed on a personal
+
+laptop equipped with an AMD Ryzen 7 6800H CPU (base clock frequency 3.2 GHz) with eight cores, 16 threads, and
+
+16 GB of DDR5 memory. The laptop runs Windows 11, and the programs were developed in C++ using Visual Studio
+
+2022. The code operates in serial mode without parallel computing.
+
+    For the third test scenario, cloud computing resources were utilized due to the significant computational demands.
+
+Neural networks were employed to perform low-thrust fuel consumption and reachability prediction calculations. The
+
+training procedure was conducted using Python, with PyTorch 2.0 and CUDA 11.7. Details of the training methods
+
+and model training processes are not elaborated on here as they are not central to this study. After model training, the
+
+
+                                                              21
+model was imported into the C++ platform via PyTorch’s C++ interface, LibTorch, and executed on a GPU to perform
+
+low-thrust fuel consumption and reachability prediction calculations. In addition to LibTorch, the authors developed all
+
+C++ software used in the third scenario. Computational resources included 2 NVIDIA RTX 3090 GPUs, each with
+
+24 GB of VRAM, and a computer equipped with a 32-core AMD EPYC 7282 3.0 GHz CPU. The calculations were
+
+performed using OpenMP 5.0 for parallel processing. The software was executed on a Linux system and compiled with
+
+GCC 10.2.0.
+
+
+A. Case 1: The GTOC4 Impulsive Problem
+
+                   Table 1    Results of the GTOC4 impulsive problem with different step sizes.
+
+                 Step size,             Fixed-step only                Fixed + adaptive-step refinment
+                   days       CPU time, s      Δ𝑣, m/s     𝑚 𝑓 , kg   CPU time, s     Δ𝑣, m/s     𝑚 𝑓 , kg
+                    32            0.311       228,369.5      0.6        12.428        25,210.4     636.7
+                    16            2.212       120,761.0     24.7        13.817        25,210.4     636.7
+                     8            17.148       67,588.0     150.8       28.249        25,210.4     636.7
+                     4           133.492       39,620.2     390.1       145.330       25,210.4     636.7
+                     2          1,045.323      31,350.8     516.8      1,057.501      25,210.4     636.7
+                     1          8,396.453      27,002.8     599.1      8,411.756      25,210.4     636.7
+
+
+   Case 1 focuses on the GTOC4 Impulsive Problem, which simplifies the original GTOC4 problem by using impulsive
+
+maneuvers applied only at flybys and rendezvous points, without any intermediate maneuvers. The original GTOC4
+
+problem will be introduced in Sec. V.C. The goal of Case 1 is to validate the effectiveness of our method for impulsive
+
+problems and to test the performance of different step sizes and the adaptive step method.
+
+   The GTOC4 impulsive problem was originally formulated by the GTOC4 champion, Moscow State University, as a
+
+simplified version during their preliminary design phase. During the GTOC4 competition, the winning team initially
+
+used bi-impulse maneuvers to approximate the global search for the flyby sequence, resulting in a preliminary trajectory
+
+design with 48 flybys and one rendezvous. Subsequently, they employed low-thrust maneuvers to refine the transfer
+
+trajectories, achieving the final winning solution with 44 flybys and one rendezvous [50].
+
+   This paper further optimizes the fuel consumption based on the flyby sequence with 48 flybys obtained from the
+
+winning team’s global search. To ensure a fair comparison, the same impulsive maneuver approach as used by the
+
+winning team is adopted, with changes in the mass and velocity as specified in Eq. (4). During the calculation process,
+
+the Δ𝑣 for each stage is determined following Eq. (34). At the final stage, an additional velocity increment is required to
+
+rendezvous with the asteroid.
+
+   The influence of step sizes on the results was analyzed, and adaptive step techniques were performed. The findings
+
+are summarized in Table 1. The adaptive step technique involves computing the initial results with a fixed step size
+
+
+                                                            22
+and then making adaptive adjustments based on these results. It functions as a supplementary process to the initial
+
+computation.
+
+    Table 1 reveals the following key observations:
+
+    • First, in the fixed-step-only case, the computation time increases significantly as the step size decreases, consistent
+
+      with the 𝑂 (𝑁𝑡3 ) growth predicted in Sec. IV.E.3.
+
+    • Second, with adaptive step refinement, the final results converge consistently, demonstrating the robustness of
+
+      this method. Moreover, additional computation time of the adaptive step procedure (i.e., the total time minus the
+
+      fixed-step-only time) remains stable and minimal, making it suitable as a foundational algorithm for exploring
+
+      other sequences.
+
+    • Finally, even with a step size reduced to one day, the fixed-step-only results show a notable deviation from the
+
+      optimal values listed in the table. This suggests that the multi-flyby problem is highly nonlinear, characterized by
+
+      numerous local optima, underscoring the need for advanced global optimization techniques. This observation is
+
+      further validated in the subsequent case study.
+
+    In conclusion, the proposed method achieves fuel savings of 20.2 kg over the winning result, demonstrating its
+
+superior efficiency. Detailed results are provided in Table 2.
+
+
+B. Case 2: The GTOC11 Problem
+
+    Case 2 validates that the proposed method can be extended to another impulsive GTOC problem, demonstrating its
+
+generality and robustness. It also illustrates how constraints on the flyby velocity can be handled and further tests the
+
+error upper bound.
+
+    The GTOC11 problem was proposed by the National University of Defense Technology and the Xi’an Satellite
+
+Control Center. One key objective of the GTOC11 problem is to design trajectories for ten motherships to fly by as
+
+many targets as possible while minimizing the mothership Δ𝑣. The thrust is modeled as impulsive, satisfying Eq. (4).
+
+The competition was won by Tsinghua University [34], and their solution will be used as the test case in Case 2.
+
+    The basic formulation of the GTOC11 problem is similar to that introduced in Sec. II. However, there are additional
+
+constraints: the departure velocity relative to the Earth must not exceed 6 km/s, and the flyby velocity, i.e., the relative
+
+velocity between the mothership and the asteroid at the flyby epoch, must remain below 2 km/s. As the GTOC11
+
+problem involves two phases and the design of the mothership trajectories constitutes the first phase, the flyby times for
+
+each asteroid must also comply with the constraints of the second phase. To decouple the problem, specific parameters
+
+from the second phase of the champion’s solution are used to compute a fixed time window. As a result, the modified
+
+results can replace the champion’s mothership trajectories without violating any constraints of the GTOC11 problem.
+
+    The solving procedure for Case 2 is like that for Case 1, except that the flyby velocity is constrained. This prevents
+
+direct computation of Δ𝑣 leg using Eq. (34). Let 𝒗 flyby represent the velocity at the flyby asteroid, while 𝒗 1 and 𝒗 2 denote
+
+
+                                                              23
+    Table 2   Detailed results of the GTOC4 impulsive problem in comparison with the winner’s result[50].
+
+           Flyby         Flyby time    Winner        Our                      Flyby       Flyby time   Winner      Our
+ No.       body         (MJD2000)      mass, kg     mass, kg      No.         body       (MJD2000)     mass, kg   mass, kg
+   1        Earth        58,676.2       1,500.0      1,500.0       26      2005WK4        60,600.7     1,082.3     1,100.8
+   2     2006QV89        58,731.9       1,487.5      1,500.0       27      2004QJ13       60,665.5     1,073.8     1,095.4
+   3      2006XP4        58,801.2       1,455.5      1,488.7       28      2006UB17       60,797.0     1,064.1     1,087.1
+   4      2008EP6        58,867.1       1,447.4      1,454.7       29       1993FA1       60,898.4     1,047.9     1,078.1
+   5      2007KV2        58,974.1       1,433.9      1,447.1       30       2005EU2       60,938.4     1,032.0     1,060.2
+   6     2005XN27        59,084.5       1,415.3      1,434.4       31        2006EC       61,052.2      996.5      1,046.8
+   7      2006TB7        59,119.3       1,407.2      1,416.5       32        143527       61,082.6      979.8      1,010.2
+   8      2008AF4        59,222.5       1,369.7      1,406.3       33       2005GY8       61,109.7      960.4       994.7
+   9      2006HF6        59,326.9       1,362.4      1,371.8       34        199801       61,201.4      956.0       977.0
+  10     2003LW2         59,366.2       1,332.9      1,368.6       35     2005XW77        61,221.1      934.2       975.8
+  11      2008PK3        59,419.8       1,317.7      1,337.1       36      2008AP33       61,285.5      925.5       956.8
+  12      2007VL3        59,520.1       1,298.4      1,324.0       37       2004JN1       61,377.3      907.4       948.8
+  13      2006AN         59,586.1       1,289.1      1,305.0       38      2007US51       61,441.8      901.6       929.3
+  14    2006UQ216        59,685.1       1,287.8      1,296.2       39        2008QB       61,486.7      895.4       924.5
+  15     2006KV89        59,746.8       1,277.8      1,295.2       40       1995SA4       61,563.0      860.7       919.6
+  16      2004SA1        59,862.9       1,242.2      1,284.6       41     2006WR127       61,645.4      839.5       885.6
+  17       154276        59,901.2       1,227.9      1,248.8       42      2002CW11       61,727.3      826.3       862.3
+  18      2006AU3        59,955.5       1,219.2      1,235.9       43      2003WP25       61,807.3      785.4       849.2
+  19     2008GM2         60,079.5       1,189.1      1,230.3       44     2006BZ147       61,869.8      779.0       807.2
+  20       2008NA        60,156.8       1,172.0      1,197.7       45     2004RN111       61,922.2      767.9       799.6
+  21     2005CD69        60,233.3       1,142.6      1,183.6       46      2006VP13       61,980.4      763.8       793.8
+  22      2008KE6        60,334.8       1,126.1      1,152.5       47      2003AS42       62,055.5      723.4       785.1
+  23    2007VD184        60,422.9       1,119.3      1,137.3       48       2008RH1       62,105.6      705.8       741.1
+  24       2008EQ        60,507.2       1,101.9      1,130.4       49      2007HW4        62,151.6      703.2       729.1
+  25      2003YP3        60,550.1       1,093.4      1,121.0       50     2000SZ162       62,262.4      616.5       636.7
+
+
+the velocities before and after the flyby, respectively. The Δ𝑣 leg for the GTOC11 problem can be calculated as
+
+
+                                        Δ𝑣 = min(∥𝒗 1 − 𝒗 flyby ∥ + ∥𝒗 flyby − 𝒗 2 ∥),                               (35)
+
+
+where the velocity 𝒗 flyby relative to the flyby body must not exceed 2 km/s, as required by the GTOC11 problem.
+
+Equation (35) can be analytically solved using the conic method described in [34]. This approach requires only 𝒗 1 , 𝒗 2 ,
+
+and the maximum allowable flyby velocity. The state variables thus remain unchanged.
+
+   Based on the sequence obtained from the winning results, the fuel consumption was further optimized using an
+
+adaptive step technique with an initial step of 32 days. The results are summarized in Table 3. To ensure a fair
+
+comparison, the winning results presented here were derived using a bi-impulse scenario, consistent with the winning
+
+team’s global optimization method [31].
+
+
+                                                             24
+   The final result submitted by the winning team surpasses that in Table 3, as they performed extensive optimization
+
+for each leg of the mothership trajectory. This included optimizing bi-impulse maneuvers not applied at the flyby event
+
+points or introducing a third maneuver mid-course. To address potential concerns, we implemented these optimizations
+
+on our result, demonstrating that it could surpass the winning solution even with limited computational resources.
+
+   An analysis of Table 3 reveals that the proposed method achieved superior results across all tasks. Notably, in
+
+Tasks 3 and 5, the velocity increment optimization was particularly significant, reaching over 600 m/s and further
+
+demonstrating the generality of the method. The ability to improve upon the winning results emphasizes the importance
+
+of global optimization for multi-flyby problems, given the prevalence of local optima in flyby trajectory design.
+
+             Table 3     Results of the GTOC11 problem in comparison with the winner’s result[34].
+
+              Mission       Sequence                        Δ𝑣, m/s              Reduced    Computational
+                 ID           length       Winner result1 After optimization     Δ𝑣, m/s          time, s
+                  1             35            14,325.9                13,944.8    381.1           4.467
+                  2             42            17,199.7                17,131.1     68.6           4.501
+                  3             39            17,330.1                16,704.1    626.0            4.21
+                  4             41            18,508.0                18,351.0    156.9           4.487
+                  5             40            16,680.7                16,033.9    646.8           3.915
+                  6             39            19,824.3                19,721.8    102.4            3.57
+                  7             37            17,606.0                17,352.9    253.2           3.398
+                  8             40            16,342.2                16,331.0     11.2           3.552
+                  9             37            15,158.4                15,025.1    133.3           3.334
+                 10             38            16,168.8                16,126.6    42.1            3.448
+               1 These values were calculated using the bi-impulse scenario.
+
+
+
+
+   Next, we discuss the error bounds of this case. Since the bi-impulse method is employed, the impulsive velocity
+
+increment is calculated accurately. Thus, the error primarily arises from grid discretization due to time discretization.
+
+To evaluate this error, we conducted the following tests:
+
+   1) Assumed a time step of 𝑡 step .
+
+   2) Calculated the baseline value: We randomly generated three time points 𝑡0 , 𝑡1 , 𝑡2 for the previous and next
+
+       transfers, and calculated Δ𝑣 leg using Eq. (35). This result is considered the baseline.
+
+   3) Calculated the approximated value: The time points 𝑡0 , 𝑡1 , 𝑡2 were rounded up or down to the nearest time step,
+
+       i.e., to the nearest integer multiple of 𝑡 step . The approximated Δ𝑣 leg was then recalculated using Eq. (35).
+
+   4) Evaluated the error: The error was defined as the difference between the actual and baseline values, i.e., the
+
+       difference between the two Δ𝑣 leg calculations.
+
+   We conducted the above tests for different 𝑡step values, and the results are shown in Table 4. The transfer sequence is
+
+taken from Mission 1 of the GTOC11 winning team. For each transfer, 10,000 simulations were performed, and the
+
+
+
+                                                                   25
+mean absolute error and the maximum absolute error of the transfer data were recorded. As observed in Table 4, the
+
+error decreases as the step size decreases, which aligns with intuitive expectations.
+
+                                      Table 4     Error statistics for the GTOC11 problem.
+
+                                      Step size, days       Average error, m/s        Max error, m/s
+                                             10                    106.13                3,098.38
+                                              1                     11.46                 710.30
+                                             0.1                    1.16                   79.30
+                                            0.01                    0.12                   8.14
+                                            0.001                    0.01                   0.87
+
+
+    To determine the upper bound of the final error in the GTOC11 results, a step size of 0.01 days was employed,
+
+requiring more computational resources and the refined filtering of infeasible states. The final results were almost
+
+identical to those obtained using adaptive step sizes, as shown in Table 4. This means that the error upper bound in our
+
+results is approximately 8 × 35 ≈ 300 m/s. Therefore, the trajectory for GTOC11 Mission 1 requires at least 13,640
+
+m/s, providing a benchmark for future research. As previously described, this method establishes a general error upper
+
+bound based on the algorithm itself, marking a novel contribution in this domain. Furthermore, the function of Table 4
+
+is not only to provide a forward estimation of the final error but also to allow for the determination of the required step
+
+size based on the desired accuracy of the results.
+
+
+C. Case 3: GTOC4 Problem
+
+    The purpose of Case 3 is to evaluate the effectiveness of the proposed method in low-thrust trajectory optimization
+
+problems, thereby verifying its general applicability across two thrust patterns. The test scenario is based on the original
+
+GTOC4 Problem.
+
+    The GTOC4 problem, proposed by the French National Center for Space Studies (CNES) † , is focused on finding
+
+an optimal asteroid flyby sequence. A spacecraft equipped with a low-thrust propulsion system departs from Earth,
+
+performs multiple flybys of asteroids, and ultimately rendezvouses with a final target. The primary objective is to
+
+maximize the number of flybys, and the secondary objective is to maximize the final spacecraft mass. When the
+
+spacecraft departs from Earth at the departure epoch 𝑡 𝑠 , it satisfies bounded residual hyperbolic velocity constraints:
+                                                                        √︃
+𝒓 (𝑡 𝑠 ) − 𝑹E (𝑡 𝑠 ) = 0, Δ𝑉E < Δ𝑉Emax , and 𝑚(𝑡 𝑠 ) = 𝑚 0 , where Δ𝑉E = Δ𝑢 2E + Δ𝑣 2E + Δ𝑤 2E , with Δ𝑢 E = 𝑢(𝑡 𝑠 ) − 𝑈E (𝑡 𝑠 ),
+
+Δ𝑣 E = 𝑣(𝑡 𝑠 ) − 𝑉E (𝑡 𝑠 ), and Δ𝑤 E = 𝑤(𝑡 𝑠 ) − 𝑊E (𝑡 𝑠 ). The quantities 𝑹E (𝑡) and 𝑽E (𝑡) represent the position and velocity
+
+vectors of Earth at time 𝑡, respectively. At the end of the mission epoch 𝑡 𝑓 , the spacecraft is required to rendezvous with
+
+a final asteroid with 𝒓 (𝑡 𝑓 ) = 𝑹 𝑁 (𝑡 𝑓 ) and 𝒗(𝑡 𝑓 ) = 𝑽𝑁 (𝑡 𝑓 ). The total flight time and the final mass of the spacecraft
+   † Bertrand, R., Epenoy, R., and Meyssignac, B., “Problem Description for the 4th Global Trajectory Optimisation Competition,” 2009, https://
+
+sophia.estec.esa.int/gtoc_portal/wp-content/uploads/2012/11/gtoc4_problem_description.pdf [retrieved 1 December 2024]
+
+
+
+
+                                                                     26
+are constrained as follows: 𝑡 𝑓 − 𝑡 𝑠 ≤ 𝑡max and 𝑚(𝑡 𝑓 ) ≥ 𝑚 min . The relevant parameters of the GTOC4 problem are
+
+summarized in Table 5.
+
+                                                             Table 5               Summary of parameters for the GTOC4 problem.
+
+                                                                                   Name              Unit                     Value
+                                                                                       𝜇             m3 /s2            1.32712440018 × 1020
+                                                                                      𝐼sp              s                       3000
+                                                                                      𝑔0             m/s2                    9.80665
+                                                                                    𝑇max              N                       0.135
+                                                                                   Δ𝑉Emax             m/s                      4000
+                                                                                     𝑚0               kg                       1500
+                                                                                    𝑡 max            years                      10
+                                                                                    𝑚 min             kg                        500
+
+
+
+                                                   1.3                                                                                                 1. Earth
+                                                                                                                                                       2. 2003QW30 27. 2003WU21
+                                                                                       Spacecraft                                            51        3. 2001VE76   28. 2006AU3
+                                                                                       Flyby/Rendezvous                                                4. 2005WS3    29. 2008GF1
+                                                   1.2                                                                                                 5. 2002CW11 30. 2007YF
+                                                                                                                                                       6. 2003UX26   31. 1999TO13
+                                                             2           8                                               37                            7. 2005OW     32. 2008LV16
+                      Heliocentric distance (AU)
+
+
+
+
+                                                                                       1718          23
+                                                                 3 7
+                                                                                                                                                       8. 2005WM3    33. 2001XY10
+                                                                                                22         27                                          9. 2008DJ     34. 2003TM1
+                                                   1.1                                                                3236 38
+                                                                 4                12 16                                                 47             10. 2008JP24  35. 2001BA16
+                                                                              9    13      19                    31                                    11. 1999XM141 36. 2000EA14
+                                                                                                                      33
+                                                         1                                                  28                  42 43                  12. 2005GE59 37. 2008TX9
+                                                    1                                            24                                                    13. 2003UB22 38. 2006VP13
+                                                             5               10                                                41                      14. 2008PW4   39. 2000AA6
+                                                                     6                                                                                 15. 2005MO13 40. 2006BO7
+                                                                                  11                                      39                 48        16. 2008NX    41. 2008UA202
+                                                                                  14                                    35                             17. 2002QH10 42. 2007EK
+                                                   0.9                                 15 20 21            26                   40                     18. 2005GA120 43. 2005UW5
+                                                                                                                                 44     46 49          19. 2006KQ1   44. 140158
+                                                                                                                                                       20. 2004CZ1   45. 2004XG
+                                                                                                                 30
+                                                                                                                       34                              21. 2007VL3   46. 2004FD
+                                                   0.8                                                                                            50   22. 6344P-L   47. 2005SY70
+                                                                                                                                                       23. 2004TP20 48. 101869
+                                                                                                      25         29                     45             24. 2008TC3   49. 2008EL85
+                                                                                                                                                       25. 141484    50. 2008UB7
+                                                   0.7                                                                                                 26. 2002AA    51. 2005CD69
+                                                         58000       58500         59000    59500          60000       60500        61000     61500
+                                                                                              T (MJD2000)
+
+             Fig. 5              Heliocentric distance over time of the optimal solution for the GTOC4 problem.
+
+
+    In the GTOC4 ranking, the Moscow State University team achieved first place by performing 44 flybys and one
+
+rendezvous. Subsequently, the University of Jena team proposed an improved solution with 49 flybys and one rendezvous,
+
+representing the best-known result to date.‡ This case study further optimizes fuel consumption based on the optimal
+
+sequence discovered by the University of Jena. During the proposed method simulation, the velocity step size was 50
+
+m/s, the time step size was 0.2 days, the mass step size was 1 kg, and the adaptive step technique was enabled. During
+
+the calculation of the required velocity increments for transfers, a neural-network-based estimator and reachability
+
+prediction method were employed. As this aspect is unrelated to the main focus of this paper, it will be detailed in a
+
+separate article.
+   ‡ https://www.youtube.com/watch?v=7QxikroB-6Q
+
+
+
+
+                                                                                                                        27
+                                                 1.25
+                                                    1
+                                                 0.75
+                                                   0.5                            Earth
+                                                 0.25                             Spacecraft
+                                                                                  Flyby/Rendezvous
+
+
+
+
+                                        y (AU)
+                                                    0
+                                                 -0.25
+                                                  -0.5
+                                                 -0.75
+                                                    -1
+                                                 -1.25
+
+
+
+
+                                                                                      0
+                                                                                          25
+
+                                                                                               5
+                                                                                                    75
+
+                                                                                                         1
+                                                                                                             25
+                                                         5
+                                                             -1
+
+                                                                  5
+                                                                        .5
+
+                                                                             5
+
+
+
+
+                                                                                               0.
+                                                    .2
+
+
+                                                                  .7
+
+
+                                                                             .2
+                                                                       -0
+
+
+
+
+                                                                                          0.
+
+
+                                                                                                    0.
+
+
+                                                                                                             1.
+                                                   -1
+
+
+                                                              -0
+
+
+                                                                            -0
+                                                                                  x (AU)
+
+
+                               Fig. 6      The Optimal trajectory for the GTOC4 problem
+
+
+    The total runtime of the simulation was 35.9 hours. After obtaining approximate global optimal flyby times and
+
+flyby velocities using the velocity increment estimation and reachability prediction, an indirect method was employed to
+
+calculate the true fuel optimal transfer trajectories. The final optimization results showed a remaining 19.9 kg of fuel,
+
+surpassing the previously published results from the University of Jena and representing the currently known optimal
+
+solution. The variation of heliocentric distance over time and the two-dimensional planar trajectory of the final result
+
+are shown in Figs. 5 and 6, respectively.
+
+    It should be noted that low-thrust reachability prediction inevitably has some errors. When dynamic programming
+
+selects an optimal path based on prediction results, it may be found that the result is not reachable when actually
+
+solving the optimal control problem. This implies a risk of actual non-reachability in low-thrust reachability prediction.
+
+Therefore, this study uses neural network prediction methods, and the results reflect the reachability probability. By
+
+artificially setting a high probability threshold, the results can ensure a certain level of robustness, thus reducing the risk
+
+of infeasibility in the actual optimal control problem.
+
+    Figure 7 compares our result with the previous optimal solution. It is observed that the maximum fuel consumption
+
+is reduced by 25 kg compared to the original solution, surpassing the average leg fuel consumption of 19.6 kg. This
+
+suggests the possibility of solutions with additional flybys.
+
+    Furthermore, Fig. 7 shows that our result consumes more initial fuel than the previous solution. This gap often
+
+prevents local optimizers from identifying better solutions. This underscores the necessity of global optimization for
+
+such problems again and highlights the superiority of the proposed method. Detailed data from our final result can be
+
+found in Table 6.
+
+    The error upper bound includes two primary error components introduced by the velocity increment estimator:
+
+grid discretization and estimator-induced errors. The testing procedure mirrors that of Case 2, where the true value is
+
+
+                                                                                 28
+                                                       30
+                                                                                                                           37
+                                                       25                                                            30 36 38
+                                                                                                         22            31     4142 45
+                                                                                                               25 27
+
+
+
+
+                              Reduced fuel mass (kg)
+                                                                                  21                                    33 39    44          50
+                                                            Average leg fuel         23                                                    48
+                                                       20
+                                                            consumption 19.6 kg 20                                      29 32 35 40 43 46 49 51
+                                                                                                                     28                  47
+                                                                                               17 19               26        34
+                                                       15                               11                    24              Flyby/ Rendezvous
+                                                                                       10 13
+                                                                                            14 1618
+                                                                                       9 12
+                                                       10                                   15
+                                                                                     8
+                                                                                 7
+                                                       5
+                                                                             6
+                                                             1           5
+                                                       0             4
+                                                                 2
+                                                                     3
+                                                       -5
+                                                            58000                58500     59000       59500       60000   60500   61000   61500
+                                                                                                       T (MJD2000)
+
+                   Fig. 7   Fuel consumption improvement over the previous GTOC4 solution.
+
+
+computed using the indirect method in the second step, and the approximate value is derived using a predictor in the
+
+third step. As a result, the estimated error upper bound for this problem is approximately 81 × 51 ≈ 4000 m/s. This
+
+relatively high value is mainly due to the high dimensionality of state variables in low-thrust trajectory computations,
+
+which constrains further reduction of the discretization step size. As discussed in Sec.IV.B, this error upper bound is
+
+conservative, and the actual error is likely smaller. The notable reduction in fuel consumption compared to the previous
+
+best-known result supports this argument.
+
+
+                                                                                             VI. Conclusion
+   This paper has presented a method for achieving global optimality in the design of multi-flyby asteroid trajectories
+
+under a given sequence. By reformulating the original optimal control problem with intermediate equality constraints
+
+into a multi-stage decision problem, Bellman’s principle was employed to derive and prove global optimality. This
+
+reformulation simplifies the handling of complex trajectory constraints while providing provable error bounds, ensuring
+
+confidence in the approximate global optimum for flyby epochs and velocities. The method accommodates both
+
+impulsive and low-thrust propulsion models and addresses mission constraints, such as limiting the magnitude of relative
+
+flyby velocities. Empirical results underscore the versatility and effectiveness of the proposed method. Applied to three
+
+benchmark GTOC problems, it improves upon known best solutions, validating the approach and demonstrating its
+
+potential for trajectory design.
+
+   In summary, this work offers a computationally tractable method for global trajectory optimization in multi-flyby
+
+missions. The foundation of this method lies in the exponential growth of computational capabilities described
+
+by Moore’s Law. Tasks that were previously computationally infeasible have now become achievable, and future
+
+advancements in computing power will further highlight the advantages of this approach. Looking ahead, this method
+
+can serve as a useful tool for mission designers seeking global optima in multi-asteroid exploration.
+
+
+                                                                                                         29
+                                    Table 6    Optimized results for the GTOC4 problem.
+
+          Flyby        Flyby time         Relative flyby        Mass,                    Flyby           Flyby time           Relative flyby     Mass,
+ No.      body        (MJD2000)           velocity, km/s         kg         No.          body           (MJD2000)             velocity, km/s      kg
+
+  1        Earth       57,938.2         (0.694,-3.939,-0.025)   1,500.0     27       2003WU21             59,923.4     (0.690,13.216,-11.099)    964.7
+  2    2003QW30        58,013.9          (9.753,-1.418,4.826)   1,488.9     28        2006AU3             59,964.8       (9.007,0.575,-1.634)    962.3
+  3     2001VE76       58,097.7           (9.168,5.250,1.649)   1,462.7     29         2008GF1            60,075.7     (-7.338,-10.823,1.467)    945.0
+  4      2005WS3       58,119.1        (-11.193,1.532,-7.589)   1,456.8     30          2007YF            60,114.1       (2.574,-6.319,0.009)    936.5
+  5    2002CW11        58,170.2         (1.011,-9.159,-1.134)   1,439.5     31        1999TO13            60,187.9     (-5.678,-5.190,-11.777)   908.4
+  6     2003UX26       58,257.8        (-10.095,-8.307,2.846)   1,411.0     32        2008LV16            60,252.9     (-1.489,-18.242,1.535)    883.0
+  7      2005OW        58,355.1       (-1.076,-10.647,-0.439)   1,385.9     33       2001XY10             60,275.8    (-6.362,-13.365,-13.514)   874.7
+  8     2005WM3        58,448.7        (11.690,-1.369,0.267)    1,358.5     34        2003TM1             60,362.5     (-15.269,-3.462,0.948)    840.8
+  9       2008DJ       58,592.3        (15.920,-6.879,3.126)    1,309.7     35        2001BA16            60,423.2       (0.828,-9.252,4.449)    822.4
+  10     2008JP24      58,657.8          (4.638,4.967,1.190)    1,290.1     36        2000EA14            60,474.7       (6.728,-7.389,1.176)    821.0
+  11   1999XM141       58,693.8         (4.751,8.492,11.993)    1,277.2     37         2008TX9            60,526.3      (11.577,-5.175,3.671)    804.5
+  12    2005GE59       58,822.9        (14.096,-0.371,8.635)    1,227.6     38        2006VP13            60,582.6       (1.555,-1.419,4.847)    782.2
+  13    2003UB22       58,844.4         (-4.988,-5.108,7.899)   1,219.2     39        2000AA6             60,657.6      (-7.278,10.842,0.660)    752.5
+  14     2008PW4       58,924.1         (4.491,-8.064,-1.197)   1,188.3     40        2006BO7             60,731.1       (1.251,5.736,0.159)     724.0
+  15    2005MO13       58,988.3       (12.426,-3.602,-2.626)    1,166.3     41       2008UA202            60,806.0       (0.241,-3.227,0.280)    707.6
+  16      2008NX       59,094.6        (-2.306,-2.948,-1.110)   1,147.0     42          2007EK            60,846.3       (-6.545,1.557,0.835)    700.8
+  17    2002QH10       59,152.2         (7.030,-8.765,-3.757)   1,139.8     43        2005UW5             60,909.1       (9.420,1.314,-2.057)    675.9
+  18   2005GA120       59,203.0          (9.192,4.187,5.149)    1,137.5     44          140158            60,985.1       (1.394,7.182,-1.639)    655.0
+  19     2006KQ1       59,262.9         (2.219,-1.046,-4.639)   1,126.1     45         2004XG             61,048.1      (-8.459,-6.237,-0.453)   632.0
+  20     2004CZ1       59,360.4         (-4.440,4.348,-0.061)   1,092.9     46          2004FD            61,112.9    (16.830,-23.171,-0.011)    616.2
+  21     2007VL3       59,436.1       (-1.534,-12.798,-0.957)   1,071.8     47        2005SY70            61,201.8      (2.694,-9.228,-0.853)    606.1
+  22      6344P-L      59,527.6        (15.789,-5.121,1.983)    1,050.8     48          101869            61,285.0     (5.888,-22.068,-2.794)    591.7
+  23    2004TP20       59,564.0         (8.454,5.919,11.466)    1,043.1     49        2008EL85            61,308.6     (11.045,-2.645,-1.286)    590.1
+  24     2008TC3       59,662.0          (8.640,-8.505,0.057)   1,009.5     50        2008UB7             61,380.3     (11.313,12.717,-0.591)    581.7
+  25      141484       59,750.7       (-3.490,-13.572,-8.079)    990.8      51       2005CD69             61,555.0       (0.000,0.000,-0.000)    519.9
+  26      2002AA       59,804.8       (7.977,-10.817,-5.912)     986.6
+
+
+
+                             Appendix: Lemmas for the Proof of Proposition 1
+   A mathematical lemma from the theory of dynamic programming for stochastic optimal control processes [52] is
+
+introduced to facilitate the proofs of Proposition 1.
+
+Lemma 1. Let 𝒇 : W → S be a function, where W is its domain and S is its range. Let M be the set of
+
+functions 𝝁 : S → D, where W , S , and D are different sets. Given any function 𝐺 0 : W → (−∞, ∞] and
+
+𝐺 1 : S × D → (−∞, ∞], if for all 𝒅 ∈ D, there exists min 𝐺 1 ( 𝒇 (𝒘), 𝒅) > −∞, then
+                                                                𝒅∈ D
+
+                                                                                                                         
+                    min max [𝐺 0 (𝒘) + 𝐺 1 ( 𝒇 (𝒘), 𝝁( 𝒇 (𝒘)))] = max 𝐺 0 (𝒘) + min 𝐺 1 ( 𝒇 (𝒘), 𝒅) .
+                    𝝁∈ M 𝒘 ∈ W                                              𝒘 ∈W                   𝒅∈ D
+
+
+
+Proof. Consider any 𝝁 ∈ M . For all 𝒘 ∈ W , the following inequality holds:
+
+                                                                                                                     
+                      max [𝐺 0 (𝒘) + 𝐺 1 ( 𝒇 (𝒘), 𝝁( 𝒇 (𝒘)))] ≥ max 𝐺 0 (𝒘) + min 𝐺 1 ( 𝒇 (𝒘), 𝒅) .
+                      𝒘 ∈W                                                𝒘 ∈W                   𝒅∈ D
+
+
+
+
+                                                                   30
+Thus, taking the minimum on the left-hand side of the above inequality still holds, that is,
+
+                                                                                                    
+                      min max [𝐺 0 (𝒘) + 𝐺 1 ( 𝒇 (𝒘), 𝝁( 𝒇 (𝒘)))] ≥ max 𝐺 0 (𝒘) + min 𝐺 1 ( 𝒇 (𝒘), 𝒅) .
+                     𝝁∈ M 𝒘 ∈ W                                              𝒘 ∈W               𝒅∈ D
+
+
+
+    Next, we prove the inequality in the other direction, “left-hand side ≤ right-hand side”:
+
+    For any positive number 𝜀 > 0, there exists 𝝁 𝜀 ∈ M such that for all 𝒘 ∈ W , the following inequality holds:
+
+
+                                         𝐺 1 ( 𝒇 (𝒘), 𝝁 𝜀 ( 𝒇 (𝒘))) ≤ min 𝐺 1 ( 𝒇 (𝒘), 𝒅) + 𝜀.
+                                                                          𝒅∈ D
+
+
+
+Therefore,
+                                            min max [𝐺 0 (𝒘) + 𝐺 1 ( 𝒇 (𝒘), 𝝁( 𝒇 (𝒘)))]
+                                            𝝁∈ M 𝒘 ∈ W
+
+                                               ≤ max [𝐺 0 (𝒘) + 𝐺 1 ( 𝒇 (𝒘), 𝝁 𝜀 ( 𝒇 (𝒘)))]
+                                                 𝒘 ∈W
+                                                                                     
+                                               ≤ max 𝐺 0 (𝒘) + min 𝐺 1 ( 𝒇 (𝒘), 𝒅) + 𝜀.
+                                                  𝒘 ∈W               𝒅∈ D
+
+Since 𝜀 can be arbitrarily small, this proves the inequality.
+
+
+                                                         Acknowledgments
+    This paper was supported by the National Natural Science Foundation of China (Grant No. 12372047, No.
+
+62227901).
+
+
+                                        Codes and Data Availability Statement
+    The codes and data associated with this paper are available on GitHub at https://github.com/zhong-zh15/
+
+Multi_Flyby_Dynamic_Programming.
+
+
+                                                              References
+ [1] Levison, H. F., Olkin, C. B., Noll, K. S., Marchi, S., III, J. F. B., Bierhaus, E., Binzel, R., Bottke, W., Britt, D., Brown, M.,
+
+     Buie, M., Christensen, P., Emery, J., Grundy, W., Hamilton, V. E., Howett, C., Mottola, S., Pätzold, M., Reuter, D., Spencer, J.,
+
+     Statler, T. S., Stern, S. A., Sunshine, J., Weaver, H., and Wong, I., “Lucy Mission to the Trojan Asteroids: Science Goals,” The
+
+     Planetary Science Journal, Vol. 2, No. 5, 2021, p. 171. https://doi.org/10.3847/PSJ/abf840.
+
+ [2] Levison, H. F., Marchi, S., Noll, K. S., Spencer, J. R., Statler, T. S., Bell, J. F., et al., “A Contact Binary Satellite of the Asteroid
+
+     (152830) Dinkinesh,” Nature, Vol. 629, No. 8014, 2024, pp. 1015–1020. https://doi.org/10.1038/s41586-024-07378-0.
+
+ [3] Ozaki, N., Yanagida, K., Chikazawa, T., Pushparaj, N., Takeishi, N., and Hyodo, R., “Asteroid Flyby Cycler Trajectory
+
+     Design Using Deep Neural Networks,” Journal of Guidance, Control, and Dynamics, Vol. 45, No. 8, 2022, pp. 1496–1511.
+
+     https://doi.org/10.2514/1.G006487.
+
+
+                                                                     31
+ [4] Michel, P., Küppers, M., Bagatin, A. C., Carry, B., Charnoz, S., de Leon, J., Fitzsimmons, A., Gordo, P., Green, S. F., Hérique,
+
+     A., Juzi, M., Karatekin, Ö., Kohout, T., Lazzarin, M., Murdoch, N., Okada, T., Palomba, E., Pravec, P., Snodgrass, C., Tortora,
+
+     P., Tsiganis, K., Ulamec, S., Vincent, J.-B., Wünnemann, K., Zhang, Y., Raducan, S. D., Dotto, E., Chabot, N., Cheng, A. F.,
+
+     Rivkin, A., Barnouin, O., Ernst, C., Stickle, A., Richardson, D. C., Thomas, C., Arakawa, M., Miyamoto, H., Nakamura, A.,
+
+     Sugita, S., Yoshikawa, M., Abell, P., Asphaug, E., Ballouz, R.-L., Bottke, W. F., Lauretta, D. S., Walsh, K. J., Martino, P., and
+
+     Carnelli, I., “The ESA Hera Mission: Detailed Characterization of the DART Impact Outcome and of the Binary Asteroid
+
+     (65803) Didymos,” The Planetary Science Journal, Vol. 3, No. 7, 2022, p. 160. https://doi.org/10.3847/PSJ/ac6f52.
+
+ [5] Ferrari, F., Franzese, V., Pugliatti, M., Giordano, C., and Topputo, F., “Preliminary Mission Profile of Hera’s Milani CubeSat,”
+
+     Advances in Space Research, Vol. 67, No. 6, 2021, pp. 2010–2029. https://doi.org/10.1016/j.asr.2020.12.034.
+
+ [6] Morelli, A. C., Mannocchi, A., Giordano, C., Ferrari, F., and Topputo, F., “Initial Trajectory Assessment of a Low-Thrust
+
+     Option for the RAMSES Mission to (99942) Apophis,” Advances in Space Research, Vol. 73, No. 8, 2024, pp. 4241–4253.
+
+     https://doi.org/10.1016/j.asr.2024.02.005.
+
+ [7] Watanabe, S., Hirabayashi, M., Hirata, N., Hirata, N., Noguchi, R., Shimaki, Y., Ikeda, H., Tatsumi, E., Yoshikawa, M., Kikuchi,
+
+     S., et al., “Hayabusa2 Arrives at the Carbonaceous Asteroid 162173 Ryugu—A Spinning Top–Shaped Rubble Pile,” Science,
+
+     Vol. 364, No. 6437, 2019, pp. 268–272. https://doi.org/10.1126/science.aav8032.
+
+ [8] Scheeres, DJ., McMahon, JW., French, AS., Brack, DN., Chesley, SR., Farnocchia, D., Takahashi, Y., Leonard, JM., Geeraert,
+
+     J., Page, B., et al., “The Dynamic Geophysical Environment of (101955) Bennu Based on OSIRIS-REx Measurements,” Nature
+
+     Astronomy, Vol. 3, No. 4, 2019, pp. 352–361. https://doi.org/10.1038/s41550-019-0721-3.
+
+ [9] Viavattene, G., and Ceriotti, M., “Low-Thrust, Multiple-near-Earth-Asteroid Mission Design with Sample Return to Earth Using
+
+     Machine Learning,” Journal of Spacecraft and Rockets, Vol. 59, No. 6, 2022, pp. 2148–2159. https://doi.org/10.2514/1.A34959.
+
+[10] Di Carlo, M., Vasile, M., and Dunlop, J., “Low-Thrust Tour of the Main Belt Asteroids,” Advances in Space Research, Vol. 62,
+
+     No. 8, 2018, pp. 2026–2045. https://doi.org/10.1016/j.asr.2017.12.033.
+
+[11] Hennes, D., Izzo, D., and Landau, D., “Fast Approximators for Optimal Low-Thrust Hops between Main Belt Asteroids,” 2016
+
+     IEEE Symposium Series on Computational Intelligence (SSCI), IEEE, Athens, 2016, pp. 1–7. https://doi.org/10.1109/SSCI.
+
+     2016.7850107.
+
+[12] Sanchez Cuartielles, J. P., Gibbings, A., Snodgrass, C., Green, S., and Bowles, N., “Asteroid Belt Multiple Flyby Options for
+
+     M-Class Missions,” Proceedings of the 67th International Astronautical Congress, International Astronautical Federation,
+
+     Guadalajara, Mexico, 2016.
+
+[13] Izzo, D., Getzner, I., Hennes, D., and Simões, L. F., “Evolving Solutions to TSP Variants for Active Space Debris Removal,”
+
+     Proceedings of the 2015 Annual Conference on Genetic and Evolutionary Computation, Association for Computing Machinery,
+
+     Madrid, Spain and New York, NY, USA, 2015, pp. 1207–1214. https://doi.org/10.1145/2739480.2754727.
+
+
+
+
+                                                                 32
+[14] Shen, H., Zhang, T., Huang, A., and Li, Z., “GTOC9: Results from the Xi’an Satellite Control Center (Team XSCC),” Acta
+
+     Futura, Vol. 11, 2018, pp. 49–55. https://doi.org/10.5281/zenodo.1139240.
+
+[15] Zhang, Z., Zhang, N., Jiao, Y., Baoyin, H., and Li, J., “Multi-Tree Search for Multi-Satellite Responsiveness Scheduling
+
+     Considering Orbital Maneuvering,” IEEE Transactions on Aerospace and Electronic Systems, Vol. 58, No. 3, 2021, pp.
+
+     2206–2217. https://doi.org/10.1109/TAES.2021.3129723.
+
+[16] Izzo, D., Sprague, C. I., and Tailor, D. V., “Machine Learning and Evolutionary Techniques in Interplanetary Trajectory Design,”
+
+     Modeling and Optimization in Space Engineering : State of the Art and New Challenges, edited by G. Fasano and J. D. Pintér,
+
+     Springer, Cham, 2019, pp. 191–210. https://doi.org/10.1007/978-3-030-10501-3_8.
+
+[17] Fahroo, F., and Ross, I. M., “Direct Trajectory Optimization by a Chebyshev Pseudospectral Method,” Journal of Guidance,
+
+     Control, and Dynamics, Vol. 25, No. 1, 2002, pp. 160–166. https://doi.org/10.2514/2.4862.
+
+[18] Ozaki, N., Campagnola, S., Funase, R., and Yam, C. H., “Stochastic Differential Dynamic Programming with Unscented
+
+     Transform for Low-Thrust Trajectory Design,” Journal of Guidance, Control, and Dynamics, Vol. 41, No. 2, 2017, pp. 377–387.
+
+     https://doi.org/10.2514/1.G002367.
+
+[19] Lantoine, G., and Russell, R. P., “A Hybrid Differential Dynamic Programming Algorithm for Constrained Optimal Control
+
+     Problems. Part 1: Theory,” Journal of Optimization Theory and Applications, Vol. 154, No. 2, 2012, pp. 382–417.
+
+     https://doi.org/10.1007/s10957-012-0039-0.
+
+[20] Aziz, J. D., Scheeres, D. J., and Lantoine, G., “Hybrid Differential Dynamic Programming in the Circular Restricted Three-Body
+
+     Problem,” Journal of Guidance, Control, and Dynamics, Vol. 42, No. 5, 2019, pp. 963–975. https://doi.org/10.2514/1.G003617.
+
+[21] Kumagai, N., and Oguri, K., “Adaptive-Mesh Sequential Convex Programming for Space Trajectory Optimization,” Journal of
+
+     Guidance, Control, and Dynamics, Vol. 47, No. 10, 2024, pp. 2213–2220. https://doi.org/10.2514/1.G008107.
+
+[22] Russell, R. P., “Primer Vector Theory Applied to Global Low-Thrust Trade Studies,” Journal of Guidance, Control, and
+
+     Dynamics, Vol. 30, No. 2, 2007, pp. 460–472. https://doi.org/10.2514/1.22984.
+
+[23] Taheri, E., Kolmanovsky, I., and Atkins, E., “Enhanced Smoothing Technique for Indirect Optimization of Minimum-
+
+     Fuel Low-Thrust Trajectories,” Journal of Guidance, Control, and Dynamics, Vol. 39, No. 11, 2016, pp. 2500–2511.
+
+     https://doi.org/10.2514/1.G000379.
+
+[24] Gao, Y., and Kluever, C., “Low-Thrust Interplanetary Orbit Transfers Using Hybrid Trajectory Optimization Method with Multiple
+
+     Shooting,” AIAA/AAS Astrodynamics Specialist Conference and Exhibit, 2004, p. 5088. https://doi.org/10.2514/6.2004-5088.
+
+[25] Li, S., Huang, X., and Yang, B., “Review of Optimization Methodologies in Global and China Trajectory Optimization
+
+     Competitions,” Progress in Aerospace Sciences, Vol. 102, 2018, pp. 60–75. https://doi.org/10.1016/j.paerosci.2018.07.004.
+
+[26] Shen, H., Luo, Y., Zhu, Y., and Huang, A., “Dyson Sphere Building: On the Design of the GTOC11 Problem and Summary of
+
+     the Results,” Acta Astronautica, Vol. 202, 2023, pp. 889–898. https://doi.org/10.1016/j.actaastro.2022.08.040.
+
+
+                                                                33
+[27] D’Amario, L. A., Byrnes, D. V., and Stanford, R. H., “A New Method for Optimizing Multiple-Flyby Trajectories,” Journal of
+
+     Guidance and Control, Vol. 4, No. 5, 1981, pp. 591–596. https://doi.org/10.2514/3.56115.
+
+[28] Olympio, J. T., “Optimal Control Problem for Low-Thrust Multiple Asteroid Tour Missions,” Journal of Guidance, Control,
+
+     and Dynamics, Vol. 34, No. 6, 2011, pp. 1709–1720. https://doi.org/10.2514/1.53339.
+
+[29] Wang, Y., Topputo, F., and Hou, X., “Analytic Gradients in Normalized Low-Thrust Trajectory Optimization with Interior-Point
+
+     Constraints,” Journal of Guidance, Control, and Dynamics, Vol. 47, No. 9, 2024, pp. 1980–1990. https://doi.org/10.2514/1.
+
+     G007896.
+
+[30] Wu, D., Guo, X., Jiang, F., and Baoyin, H., “Atlas of Optimal Low-Thrust Rephasing Solutions in Circular Orbit,” Journal of
+
+     Guidance, Control, and Dynamics, Vol. 46, No. 5, 2023, pp. 856–870. https://doi.org/10.2514/1.G007138.
+
+[31] Zhang, Z., Zhang, N., Chen, Z., Jiang, F., Baoyin, H., and Li, J., “Global Trajectory Optimization of Multispacecraft Successive
+
+     Rendezvous Using Multitree Search,” Journal of Guidance, Control, and Dynamics, Vol. 47, No. 3, 2024, pp. 503–517.
+
+     https://doi.org/10.2514/1.G007764.
+
+[32] Bellome, A., Sánchez, J.-P., Felicetti, L., and Kemble, S., “Multiobjective Design of Gravity-Assist Trajectories via Graph
+
+     Transcription and Dynamic Programming,” Journal of Spacecraft and Rockets, Vol. 60, No. 5, 2023, pp. 1381–1399.
+
+     https://doi.org/10.2514/1.a35472.
+
+[33] Bellome, A., Sánchez, J. P., Mateas, J. C. G., Felicetti, L., and Kemble, S., “Modified Dynamic Programming for Asteroids Belt
+
+     Exploration,” Acta Astronautica, Vol. 215, 2024, pp. 142–155. https://doi.org/10.1016/j.actaastro.2023.11.018.
+
+[34] Zhang, Z., Zhang, N., Guo, X., Wu, D., Xie, X., Li, J., Yang, J., Chen, S., Jiang, F., Baoyin, H., Li, H., Zheng, H., and Duan, X.,
+
+     “GTOC 11: Results from Tsinghua University and Shanghai Institute of Satellite Engineering,” Acta Astronautica, Vol. 202,
+
+     2023, pp. 819–828. https://doi.org/10.1016/j.actaastro.2022.06.028.
+
+[35] Zhu, Y., and Luo, Y., “Fast Evaluation of Low-Thrust Transfers via Multilayer Perceptions,” Journal of Guidance, Control, and
+
+     Dynamics, Vol. 42, No. 12, 2019, pp. 2627–2637. https://doi.org/10.2514/1.G004080.
+
+[36] Viavattene, G., and Ceriotti, M., “Artificial Neural Networks for Multiple NEA Rendezvous Missions with Continuous Thrust,”
+
+     Journal of Spacecraft and Rockets, Vol. 59, No. 2, 2022, pp. 574–586. https://doi.org/10.2514/1.A34799.
+
+[37] Song, Y., and Gong, S., “Solar-Sail Trajectory Design for Multiple near-Earth Asteroid Exploration Based on Deep Neural
+
+     Networks,” Aerospace Science and Technology, Vol. 91, 2019, pp. 28–40. https://doi.org/10.1016/j.ast.2019.04.056.
+
+[38] Zheng, T., Cheng, L., Gong, S., and Huang, X., “Model Incremental Learning of Flight Dynamics Enhanced by Sample
+
+     Management,” Aerospace Science and Technology, Vol. 160, 2025, p. 110049. https://doi.org/10.1016/j.ast.2025.110049.
+
+[39] Qu, C., Cheng, L., Gong, S., and Huang, X., “Experience Replay Enhances Excitation Condition of Neural-Network
+
+     Adaptive Control Learning,” Journal of Guidance, Control, and Dynamics, Vol. 48, No. 3, 2025, pp. 496–507. https:
+
+     //doi.org/10.2514/1.G008162.
+
+
+                                                                  34
+[40] Yang, J., Zhang, Z., Li, J., and Jiang, F., “Deep Neural Networks-Based Efficient Mapping of Three-Dimensional Lunar Gravity
+
+     Assist in the Circular Restricted Three-Body Problem,” IEEE Transactions on Aerospace and Electronic Systems, 2025, pp.
+
+     1–16. https://doi.org/10.1109/TAES.2025.3567278.
+
+[41] Zhang, Z., Zhang, N., Guo, X., Wu, D., Xie, X., Yang, J., Jiang, F., and Baoyin, H., “Sustainable Asteroid Mining: On the Design
+
+     of GTOC12 Problem and Summary of Results,” Astrodynamics, Vol. 9, No. 1, 2025, pp. 3–17. https://doi.org/10.1007/s42064-
+
+     024-0199-3.
+
+[42] Russell, R. P., “On the Solution to Every Lambert Problem,” Celestial Mechanics and Dynamical Astronomy, Vol. 131, No. 11,
+
+     2019, p. 50. https://doi.org/10.1007/s10569-019-9927-z.
+
+[43] Izzo, D., “Revisiting Lambert’s Problem,” Celestial Mechanics and Dynamical Astronomy, Vol. 121, No. 1, 2015, pp. 1–15.
+
+     https://doi.org/10.1007/s10569-014-9587-y.
+
+[44] Russell, R. P., “Complete Lambert Solver Including Second-Order Sensitivities,” Journal of Guidance, Control, and Dynamics,
+
+     Vol. 45, No. 2, 2021, pp. 196–212. https://doi.org/10.2514/1.G006089.
+
+[45] Topputo, F., Merisio, G., Franzese, V., Giordano, C., Massari, M., Pilato, G., Labate, D., Cervone, A., Speretta, S., Menicucci,
+
+     A., Turan, E., Bertels, E., Vennekens, J., Walker, R., and Koschny, D., “Meteoroids Detection with the LUMIO Lunar CubeSat,”
+
+     Icarus, Vol. 389, 2023, p. 115213. https://doi.org/10.1016/j.icarus.2022.115213.
+
+[46] Cervone, A., Topputo, F., Speretta, S., Menicucci, A., Turan, E., Di Lizia, P., Massari, M., Franzese, V., Giordano, C., Merisio,
+
+     G., Labate, D., Pilato, G., Costa, E., Bertels, E., Thorvaldsen, A., Kukharenka, A., Vennekens, J., and Walker, R., “LUMIO: A
+
+     CubeSat for Observing and Characterizing Micro-Meteoroid Impacts on the Lunar Far Side,” Acta Astronautica, Vol. 195,
+
+     2022, pp. 309–317. https://doi.org/10.1016/j.actaastro.2022.03.032.
+
+[47] Armellin, R., Gondelach, D., and San Juan, J. F., “Multiple Revolution Perturbed Lambert Problem Solvers,” Journal of
+
+     Guidance, Control, and Dynamics, Vol. 41, No. 9, 2018, pp. 2019–2032. https://doi.org/10.2514/1.G003531.
+
+[48] Yang, B., Li, S., Feng, J., and Vasile, M., “Fast Solver for J2-perturbed Lambert Problem Using Deep Neural Network,” Journal
+
+     of Guidance, Control, and Dynamics, Vol. 45, No. 5, 2021, pp. 875–884. https://doi.org/10.2514/1.G006091.
+
+[49] Woollands, R. M., Bani Younes, A., and Junkins, J. L., “New Solutions for the Perturbed Lambert Problem Using Regularization
+
+     and Picard Iteration,” Journal of Guidance, Control, and Dynamics, Vol. 38, No. 9, 2015, pp. 1548–1562. https://doi.org/10.
+
+     2514/1.G001028.
+
+[50] Grigoriev, I. S., and Zapletin, M. P., “Choosing Promising Sequences of Asteroids,” Automation and Remote Control, Vol. 74,
+
+     No. 8, 2013, pp. 1284–1296. https://doi.org/10.1134/S0005117913080055.
+
+[51] Russell, R. P., McArdle, S., Ottesen, D., Zucchelli, E. M., and Brandenburg, W. E., “Global Trajectory Optimization,
+
+     Pathfinding, and Scheduling for a Multi-Flyby, Multi-Spacecraft Mission,” Acta Astronautica, Vol. 202, 2023, pp. 863–875.
+
+     https://doi.org/10.1016/j.actaastro.2022.07.007.
+
+
+                                                                 35
+[52] Bertsekas, D., “Dynamic Programming and Optimal Control,” Dynamic Programming and Optimal Control, Vol. 1, Athena
+
+     scientific, Nashua, 2012, 4th ed., pp. 42–50.
+
+
+
+
+                                                         36
+
