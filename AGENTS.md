@@ -1,5 +1,10 @@
 # CTOC14 项目必须遵守的约定
 
+## GitHub 同步历史（2026-09-28）
+
+- 用户要求恢复 GitHub 推送，明确指定旧的 125.64 MiB `runs/fragments/fragment120_20260921/batch.mat` 不上传。仅在独立副本中过滤该路径的历史，再把可发布历史接入当前 main；旧 main 完整保存在 `codex/archive-before-github-20260928`，原回滚标签不改，完整 bundle 位于 `D:/CTOC-14/git-backups/`。见 docs/GITHUB_SYNC_20260928.md。
+- 日常只推送当前 main 到 origin/main。原归档分支、旧回滚标签保留含大文件的原始历史，仅供本地恢复；不要使用 `git push --all`、`--mirror` 或批量 `--tags`，不要把归档分支合并回 main。无需 force push。此项用户授权只排除上述一个文件，不授权删除其他原始实验资料或历史。
+
 ## 赛后自由中间机动与文献复盘（2026-09-28）
 
 - 用户要求从公开场景反推策略，并检索两次访问之间更好中继状态/机动点的研究。见 docs/V4_INTERMEDIATE_MANEUVER_LITERATURE_20260928.md。只做离线统计和研究，未恢复搜索、修改生产模块或运行 ATK。
